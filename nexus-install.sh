@@ -180,8 +180,6 @@ NEXUS_ID=""
 ATTEMPT=1
 MAX_ATTEMPTS=3
 
-echo "Теперь введите ваш Nexus ID:"
-
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     if [ $ATTEMPT -gt 1 ]; then
         echo ""
