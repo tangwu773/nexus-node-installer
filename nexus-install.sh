@@ -53,6 +53,11 @@ else
     echo "✅ tmux уже установлен."
 fi
 
+echo ""
+printf "\033[1;32m================================================\033[0m\n"
+printf "\033[1;32mПРОВЕРКА СУЩЕСТВУЮЩИХ СЕССИЙ\033[0m\n"
+printf "\033[1;32m================================================\033[0m\n"
+
 # Check if tmux session "nexus" already exists and kill it before swap operations
 if tmux has-session -t nexus 2>/dev/null; then
     echo "⚠️  Обнаружена работающая сессия tmux 'nexus' (возможно, запущен Nexus)"
