@@ -39,24 +39,64 @@ echo ""
 
 # Remove all existing swap files
 echo "Отключение всех файлов подкачки..."
-sudo swapoff -a 2>/dev/null || warning_message "Не удалось отключить все swap файлы"
 
-# Wait a moment for swapoff to complete
+# First, try to disable all swap
+sudo swapoff -a 2>/dev/null
+
+# Wait for processes to release swap
+sleep 3
+
+# Force kill processes using swap if needed
+sudo fuser -k /swapfile 2>/dev/null || true
 sleep 2
 
-# Remove existing swapfile if it exists
-if [ -f /swapfile ]; then
-    echo "Удаление существующего файла подкачки /swapfile..."
-    sudo rm -f /swapfile 2>/dev/null || {
-        warning_message "Не удалось удалить /swapfile, возможно он используется. Пытаемся принудительно..."
-        sudo fuser -k /swapfile 2>/dev/null || true
+# Try multiple times to remove existing swapfile
+MAX_REMOVE_ATTEMPTS=5
+REMOVE_ATTEMPT=1
+
+while [ $REMOVE_ATTEMPT -le $MAX_REMOVE_ATTEMPTS ] && [ -f /swapfile ]; do
+    echo "Попытка удаления файла подкачки $REMOVE_ATTEMPT из $MAX_REMOVE_ATTEMPTS"
+    
+    # Disable swap on this specific file
+    sudo swapoff /swapfile 2>/dev/null || true
+    sleep 1
+    
+    # Force kill any processes still using the file
+    sudo fuser -k /swapfile 2>/dev/null || true
+    sleep 1
+    
+    # Try to remove the file
+    if sudo rm -f /swapfile 2>/dev/null; then
+        echo "✅ Старый файл подкачки удален"
+        break
+    else
+        echo "⚠️ Попытка $REMOVE_ATTEMPT: не удалось удалить /swapfile"
         sleep 2
-        sudo rm -f /swapfile 2>/dev/null || warning_message "Не удалось удалить файл подкачки, продолжаем..."
-    }
+    fi
+    
+    REMOVE_ATTEMPT=$((REMOVE_ATTEMPT + 1))
+done
+
+# Check if old swapfile still exists
+if [ -f /swapfile ]; then
+    error_exit "Не удалось удалить существующий файл подкачки /swapfile после $MAX_REMOVE_ATTEMPTS попыток. Возможно, файл используется системным процессом. Попробуйте перезагрузить сервер."
 fi
+
+echo "✅ Подготовка к созданию нового файла подкачки завершена"
+echo ""
 
 # Create a new swap file with the specified size
 echo "Создание нового файла подкачки размером ${SWAP_SIZE}ГБ..."
+
+# Check available disk space
+AVAILABLE_SPACE=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
+REQUIRED_SPACE=$((SWAP_SIZE + 1))  # Add 1GB buffer
+
+if [ $AVAILABLE_SPACE -lt $REQUIRED_SPACE ]; then
+    error_exit "Недостаточно свободного места. Доступно: ${AVAILABLE_SPACE}ГБ, требуется: ${REQUIRED_SPACE}ГБ (${SWAP_SIZE}ГБ + 1ГБ буфер)"
+fi
+
+echo "✅ Проверка места: доступно ${AVAILABLE_SPACE}ГБ, требуется ${REQUIRED_SPACE}ГБ"
 
 # Try to create swap file, retry if failed
 MAX_SWAP_ATTEMPTS=3
@@ -66,27 +106,44 @@ while [ $SWAP_ATTEMPT -le $MAX_SWAP_ATTEMPTS ]; do
     if [ $SWAP_ATTEMPT -gt 1 ]; then
         echo ""
         echo "Попытка создания swap-файла $SWAP_ATTEMPT из $MAX_SWAP_ATTEMPTS"
-        sleep 2
+        sleep 3
+        
+        # Clean up any partial files
+        sudo rm -f /swapfile 2>/dev/null || true
     fi
     
+    # Try to create the file
+    echo "Создание файла размером ${SWAP_SIZE}ГБ..."
     if sudo fallocate -l ${SWAP_SIZE}G /swapfile 2>/dev/null; then
-        if sudo chmod 600 /swapfile && sudo mkswap /swapfile 2>/dev/null && sudo swapon /swapfile 2>/dev/null; then
-            echo "✅ Файл подкачки создан и включен."
-            echo ""
-            echo "Информация о файле подкачки:"
-            sudo swapon --show
-            printf "\033[0m"  # Reset color formatting
-            echo ""
-            echo "Статус памяти после создания swap-файла:"
-            free -h
-            break
+        echo "✅ Файл создан, настройка прав доступа..."
+        if sudo chmod 600 /swapfile; then
+            echo "✅ Права установлены, инициализация swap..."
+            if sudo mkswap /swapfile 2>/dev/null; then
+                echo "✅ Swap инициализирован, активация..."
+                if sudo swapon /swapfile 2>/dev/null; then
+                    echo "✅ Файл подкачки создан и включен."
+                    echo ""
+                    echo "Информация о файле подкачки:"
+                    sudo swapon --show
+                    printf "\033[0m"  # Reset color formatting
+                    echo ""
+                    echo "Статус памяти после создания swap-файла:"
+                    free -h
+                    break
+                else
+                    echo "❌ Ошибка при активации swap-файла (попытка $SWAP_ATTEMPT)"
+                fi
+            else
+                echo "❌ Ошибка при инициализации swap (попытка $SWAP_ATTEMPT)"
+            fi
         else
-            echo "⚠️ Ошибка при настройке swap-файла (попытка $SWAP_ATTEMPT)"
-            # Clean up failed attempt
-            sudo rm -f /swapfile 2>/dev/null || true
+            echo "❌ Ошибка при установке прав доступа (попытка $SWAP_ATTEMPT)"
         fi
+        # Clean up failed attempt
+        sudo rm -f /swapfile 2>/dev/null || true
     else
-        echo "⚠️ Не удалось создать файл подкачки (попытка $SWAP_ATTEMPT)"
+        echo "❌ Не удалось создать файл подкачки (попытка $SWAP_ATTEMPT)"
+        echo "Возможные причины: недостаточно места, проблемы с правами или файловой системой"
     fi
     
     SWAP_ATTEMPT=$((SWAP_ATTEMPT + 1))
