@@ -8,18 +8,33 @@ SWAP_SIZE=${SWAP_SIZE:-12}
 # Remove all existing swap files
 echo "Отключение всех файлов подкачки..."
 sudo swapoff -a
+
+# Wait a moment for swapoff to complete
+sleep 2
+
+# Remove existing swapfile if it exists
 if [ -f /swapfile ]; then
     echo "Удаление существующего файла подкачки /swapfile..."
-    sudo rm /swapfile
+    sudo rm -f /swapfile 2>/dev/null || {
+        echo "Не удалось удалить /swapfile, возможно он используется. Пытаемся принудительно..."
+        sudo fuser -k /swapfile 2>/dev/null
+        sleep 2
+        sudo rm -f /swapfile 2>/dev/null || echo "Не удалось удалить файл подкачки, продолжаем..."
+    }
 fi
 
 # Create a new swap file with the specified size
 echo "Создание нового файла подкачки размером ${SWAP_SIZE}ГБ..."
-sudo fallocate -l ${SWAP_SIZE}G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-echo "Файл подкачки создан и включен."
+if sudo fallocate -l ${SWAP_SIZE}G /swapfile; then
+    sudo chmod 600 /swapfile
+    if sudo mkswap /swapfile && sudo swapon /swapfile; then
+        echo "Файл подкачки создан и включен."
+    else
+        echo "Ошибка при создании swap. Продолжаем без swap файла..."
+    fi
+else
+    echo "Не удалось создать файл подкачки. Продолжаем установку..."
+fi
 
 # Check if tmux is installed
 if ! command -v tmux &> /dev/null; then
@@ -41,27 +56,48 @@ echo "Установка Nexus CLI..."
 curl https://cli.nexus.xyz/ | sh
 
 # Display instructions for obtaining Nexus ID
-echo "Скопируйте Nexus ID с сайта Nexus. Для этого в браузере перейдите по адресу https://app.nexus.xyz/nodes, войдите в свой аккаунт (кнопка Sign In), нажмите кнопку \"Add CLI Node\" и скопируйте появившиеся цифры. Это и есть ваш Nexus ID для данной ноды."
+echo ""
+echo "================================================"
+echo "ВАЖНО: Получите ваш Nexus ID"
+echo "================================================"
+echo "1. Откройте браузер и перейдите на: https://app.nexus.xyz/nodes"
+echo "2. Войдите в свой аккаунт (кнопка Sign In)" 
+echo "3. Нажмите кнопку 'Add CLI Node'"
+echo "4. Скопируйте появившиеся цифры - это ваш Nexus ID"
+echo ""
 
 # Ask for Nexus ID and save it with retry logic
 NEXUS_ID=""
 ATTEMPT=1
 MAX_ATTEMPTS=3
 
-while [ $ATTEMPT -le $MAX_ATTEMPTS ] && [ -z "$NEXUS_ID" ]; do
+echo "Теперь введите ваш Nexus ID:"
+
+while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     if [ $ATTEMPT -gt 1 ]; then
+        echo ""
         echo "Попытка $ATTEMPT из $MAX_ATTEMPTS"
+        echo "Nexus ID не может быть пустым!"
     fi
-    read -p "Введите ваш Nexus ID: " NEXUS_ID
     
-    if [ -z "$NEXUS_ID" ]; then
-        echo "Nexus ID не может быть пустым"
-        ATTEMPT=$((ATTEMPT + 1))
+    echo -n "Введите ваш Nexus ID: "
+    read NEXUS_ID
+    
+    # Trim whitespace
+    NEXUS_ID=$(echo "$NEXUS_ID" | xargs)
+    
+    if [ -n "$NEXUS_ID" ]; then
+        echo "Получен Nexus ID: $NEXUS_ID"
+        break
     fi
+    
+    ATTEMPT=$((ATTEMPT + 1))
 done
 
 if [ -z "$NEXUS_ID" ]; then
-    echo "Не удалось получить Nexus ID после $MAX_ATTEMPTS попыток. Скрипт завершен."
+    echo ""
+    echo "❌ Не удалось получить Nexus ID после $MAX_ATTEMPTS попыток."
+    echo "Скрипт завершен. Запустите скрипт заново и обязательно введите Nexus ID."
     exit 1
 fi
 
@@ -72,8 +108,26 @@ if tmux has-session -t nexus 2>/dev/null; then
 fi
 
 # Start a tmux session named "nexus" and run the command
+echo ""
 echo "Запуск сессии tmux с именем 'nexus'..."
-tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID"
+
+if tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID"; then
+    echo "✅ Сессия tmux успешно создана"
+    
+    # Wait a moment and check if the session is still running
+    sleep 3
+    if tmux has-session -t nexus 2>/dev/null; then
+        echo "✅ Нода успешно запущена"
+    else
+        echo "⚠️ Сессия tmux завершилась. Проверьте правильность Nexus ID"
+        echo "Попробуйте подключиться вручную: tmux attach -t nexus"
+    fi
+else
+    echo "❌ Ошибка при создании tmux сессии"
+    echo "Попробуйте запустить ноду вручную:"
+    echo "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID"
+    exit 1
+fi
 
 echo "=================================="
 echo "Нода Nexus успешно запущена в фоновом режиме!"
