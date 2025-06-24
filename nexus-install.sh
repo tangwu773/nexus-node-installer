@@ -50,16 +50,18 @@ if ! command -v tmux &> /dev/null; then
     fi
     echo "✅ tmux успешно установлен."
 else
-    # Check if tmux session "nexus" already exists and kill it before swap operations
-    if tmux has-session -t nexus 2>/dev/null; then
-        echo "⚠️  Обнаружена работающая сессия tmux 'nexus' (возможно, запущен Nexus)"
-        echo "Завершаем сессию для безопасной работы со swap-файлом..."
-        tmux kill-session -t nexus 2>/dev/null || warning_message "Не удалось завершить существующую сессию"
-        echo "✅ Существующая сессия завершена."
-        sleep 2  # Wait for processes to fully terminate
-    else
-        echo "✅ Активных сессий 'nexus' не обнаружено."
-    fi
+    echo "✅ tmux уже установлен."
+fi
+
+# Check if tmux session "nexus" already exists and kill it before swap operations
+if tmux has-session -t nexus 2>/dev/null; then
+    echo "⚠️  Обнаружена работающая сессия tmux 'nexus' (возможно, запущен Nexus)"
+    echo "Завершаем сессию для безопасной работы со swap-файлом..."
+    tmux kill-session -t nexus 2>/dev/null || warning_message "Не удалось завершить существующую сессию"
+    echo "✅ Существующая сессия завершена."
+    sleep 2  # Wait for processes to fully terminate
+else
+    echo "✅ Активных сессий 'nexus' не обнаружено."
 fi
 
 # Ask for swap file size in GB
