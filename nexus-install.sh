@@ -75,18 +75,58 @@ else
     echo "✅ tmux уже установлен."
 fi
 
-# Install Nexus CLI
-echo "Установка Nexus CLI..."
-if ! curl https://cli.nexus.xyz/ | sh; then
-    error_exit "Не удалось установить Nexus CLI. Проверьте интернет-соединение."
+# Check if tmux session "nexus" already exists and kill it before installation
+if tmux has-session -t nexus 2>/dev/null; then
+    echo "Обнаружена существующая сессия tmux 'nexus'. Завершаем её перед установкой..."
+    tmux kill-session -t nexus 2>/dev/null || warning_message "Не удалось завершить существующую сессию"
 fi
 
-# Verify that nexus-network binary was installed
-if [ ! -f "$HOME/.nexus/bin/nexus-network" ]; then
-    error_exit "Nexus CLI установлен, но исполняемый файл не найден в $HOME/.nexus/bin/nexus-network"
+# Check if Nexus CLI is already installed
+if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+    echo "✅ Nexus CLI уже установлен."
+    
+    # Get version if possible
+    if NEXUS_VERSION=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null); then
+        echo "Текущая версия: $NEXUS_VERSION"
+    else
+        echo "Версия: не удалось определить"
+    fi
+    
+    echo ""
+    echo "Хотите переустановить Nexus CLI? (y/N): "
+    read REINSTALL_CHOICE </dev/tty
+    
+    case "${REINSTALL_CHOICE,,}" in
+        y|yes|да|д)
+            echo "Переустанавливаем Nexus CLI..."
+            # Remove existing installation
+            rm -rf "$HOME/.nexus" 2>/dev/null || warning_message "Не удалось удалить старую установку"
+            INSTALL_NEXUS=true
+            ;;
+        *)
+            echo "Используем существующую установку Nexus CLI."
+            INSTALL_NEXUS=false
+            ;;
+    esac
+else
+    echo "Nexus CLI не установлен."
+    INSTALL_NEXUS=true
 fi
 
-echo "✅ Nexus CLI успешно установлен."
+# Install Nexus CLI if needed
+if [ "$INSTALL_NEXUS" = true ]; then
+    echo "Установка Nexus CLI..."
+    if ! curl https://cli.nexus.xyz/ | sh; then
+        error_exit "Не удалось установить Nexus CLI. Проверьте интернет-соединение."
+    fi
+    
+    # Verify that nexus-network binary was installed
+    if [ ! -f "$HOME/.nexus/bin/nexus-network" ]; then
+        error_exit "Nexus CLI установлен, но исполняемый файл не найден в $HOME/.nexus/bin/nexus-network"
+    fi
+    
+    echo "✅ Nexus CLI успешно установлен."
+fi
 
 # Display instructions for obtaining Nexus ID
 echo ""
@@ -130,12 +170,6 @@ done
 if [ -z "$NEXUS_ID" ]; then
     echo ""
     error_exit "Не удалось получить Nexus ID после $MAX_ATTEMPTS попыток. Запустите скрипт заново и обязательно введите Nexus ID."
-fi
-
-# Check if tmux session "nexus" already exists
-if tmux has-session -t nexus 2>/dev/null; then
-    echo "Сессия tmux с именем 'nexus' уже существует. Завершаем её..."
-    tmux kill-session -t nexus 2>/dev/null || warning_message "Не удалось завершить существующую сессию"
 fi
 
 # Start a tmux session named "nexus" and run the command
