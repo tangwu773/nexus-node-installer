@@ -64,6 +64,7 @@ if sudo fallocate -l ${SWAP_SIZE}G /swapfile 2>/dev/null; then
         echo ""
         echo "Информация о файле подкачки:"
         sudo swapon --show
+        printf "\033[0m"  # Reset color formatting
         echo ""
         echo "Статус памяти после создания swap-файла:"
         free -h
