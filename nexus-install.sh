@@ -25,6 +25,43 @@ warning_message() {
     echo "Продолжаем выполнение..."
 }
 
+# Check and stop existing tmux sessions first (before swap operations)
+echo ""
+printf "\033[1;32m================================================\033[0m\n"
+printf "\033[1;32mПРОВЕРКА СУЩЕСТВУЮЩИХ ПРОЦЕССОВ\033[0m\n"
+printf "\033[1;32m================================================\033[0m\n"
+
+# Check if tmux is installed first
+if ! command -v tmux &> /dev/null; then
+    echo "tmux не установлен. Установка tmux..."
+    if [ -x "$(command -v apt)" ]; then
+        if ! sudo apt update; then
+            error_exit "Не удалось обновить список пакетов apt"
+        fi
+        if ! sudo apt install -y tmux; then
+            error_exit "Не удалось установить tmux через apt"
+        fi
+    elif [ -x "$(command -v yum)" ]; then
+        if ! sudo yum install -y tmux; then
+            error_exit "Не удалось установить tmux через yum"
+        fi
+    else
+        error_exit "Не удалось определить менеджер пакетов. Установите tmux вручную."
+    fi
+    echo "✅ tmux успешно установлен."
+else
+    # Check if tmux session "nexus" already exists and kill it before swap operations
+    if tmux has-session -t nexus 2>/dev/null; then
+        echo "⚠️  Обнаружена работающая сессия tmux 'nexus' (возможно, запущен Nexus)"
+        echo "Завершаем сессию для безопасной работы со swap-файлом..."
+        tmux kill-session -t nexus 2>/dev/null || warning_message "Не удалось завершить существующую сессию"
+        echo "✅ Существующая сессия завершена."
+        sleep 2  # Wait for processes to fully terminate
+    else
+        echo "✅ Активных сессий 'nexus' не обнаружено."
+    fi
+fi
+
 # Ask for swap file size in GB
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
@@ -152,47 +189,6 @@ done
 # Check if swap creation was successful
 if [ $SWAP_ATTEMPT -gt $MAX_SWAP_ATTEMPTS ]; then
     error_exit "Не удалось создать файл подкачки после $MAX_SWAP_ATTEMPTS попыток. Проверьте свободное место на диске и права доступа."
-fi
-
-echo ""
-printf "\033[1;32m================================================\033[0m\n"
-printf "\033[1;32mУСТАНОВКА TMUX\033[0m\n"
-printf "\033[1;32m================================================\033[0m\n"
-
-# Check if tmux is installed
-if ! command -v tmux &> /dev/null; then
-    echo "tmux не установлен. Установка tmux..."
-    if [ -x "$(command -v apt)" ]; then
-        if ! sudo apt update; then
-            error_exit "Не удалось обновить список пакетов apt"
-        fi
-        if ! sudo apt install -y tmux; then
-            error_exit "Не удалось установить tmux через apt"
-        fi
-    elif [ -x "$(command -v yum)" ]; then
-        if ! sudo yum install -y tmux; then
-            error_exit "Не удалось установить tmux через yum"
-        fi
-    else
-        error_exit "Не удалось определить менеджер пакетов. Установите tmux вручную."
-    fi
-    echo "✅ tmux успешно установлен."
-else
-    echo "✅ tmux уже установлен."
-fi
-
-echo ""
-printf "\033[1;32m================================================\033[0m\n"
-printf "\033[1;32mПРОВЕРКА СУЩЕСТВУЮЩИХ СЕССИЙ\033[0m\n"
-printf "\033[1;32m================================================\033[0m\n"
-
-# Check if tmux session "nexus" already exists and kill it before installation
-if tmux has-session -t nexus 2>/dev/null; then
-    echo "Обнаружена существующая сессия tmux 'nexus'. Завершаем её..."
-    tmux kill-session -t nexus 2>/dev/null || warning_message "Не удалось завершить существующую сессию"
-    echo "✅ Существующая сессия завершена."
-else
-    echo "✅ Активных сессий 'nexus' не обнаружено."
 fi
 
 echo ""
