@@ -58,21 +58,43 @@ fi
 # Create a new swap file with the specified size
 echo "Создание нового файла подкачки размером ${SWAP_SIZE}ГБ..."
 
-if sudo fallocate -l ${SWAP_SIZE}G /swapfile 2>/dev/null; then
-    if sudo chmod 600 /swapfile && sudo mkswap /swapfile 2>/dev/null && sudo swapon /swapfile 2>/dev/null; then
-        echo "✅ Файл подкачки создан и включен."
+# Try to create swap file, retry if failed
+MAX_SWAP_ATTEMPTS=3
+SWAP_ATTEMPT=1
+
+while [ $SWAP_ATTEMPT -le $MAX_SWAP_ATTEMPTS ]; do
+    if [ $SWAP_ATTEMPT -gt 1 ]; then
         echo ""
-        echo "Информация о файле подкачки:"
-        sudo swapon --show
-        printf "\033[0m"  # Reset color formatting
-        echo ""
-        echo "Статус памяти после создания swap-файла:"
-        free -h
-    else
-        warning_message "Ошибка при создании swap. Продолжаем без swap файла..."
+        echo "Попытка создания swap-файла $SWAP_ATTEMPT из $MAX_SWAP_ATTEMPTS"
+        sleep 2
     fi
-else
-    warning_message "Не удалось создать файл подкачки. Продолжаем установку..."
+    
+    if sudo fallocate -l ${SWAP_SIZE}G /swapfile 2>/dev/null; then
+        if sudo chmod 600 /swapfile && sudo mkswap /swapfile 2>/dev/null && sudo swapon /swapfile 2>/dev/null; then
+            echo "✅ Файл подкачки создан и включен."
+            echo ""
+            echo "Информация о файле подкачки:"
+            sudo swapon --show
+            printf "\033[0m"  # Reset color formatting
+            echo ""
+            echo "Статус памяти после создания swap-файла:"
+            free -h
+            break
+        else
+            echo "⚠️ Ошибка при настройке swap-файла (попытка $SWAP_ATTEMPT)"
+            # Clean up failed attempt
+            sudo rm -f /swapfile 2>/dev/null || true
+        fi
+    else
+        echo "⚠️ Не удалось создать файл подкачки (попытка $SWAP_ATTEMPT)"
+    fi
+    
+    SWAP_ATTEMPT=$((SWAP_ATTEMPT + 1))
+done
+
+# Check if swap creation was successful
+if [ $SWAP_ATTEMPT -gt $MAX_SWAP_ATTEMPTS ]; then
+    error_exit "Не удалось создать файл подкачки после $MAX_SWAP_ATTEMPTS попыток. Проверьте свободное место на диске и права доступа."
 fi
 
 echo ""
