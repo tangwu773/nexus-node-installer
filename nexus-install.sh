@@ -258,6 +258,81 @@ fi
 
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
+printf "\033[1;32mПРОВЕРКА СОВМЕСТИМОСТИ СИСТЕМЫ\033[0m\n"
+printf "\033[1;32m================================================\033[0m\n"
+
+# Check OS compatibility
+echo "Проверка операционной системы..."
+
+# Get OS information
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS_NAME="$NAME"
+    OS_VERSION="$VERSION_ID"
+    echo "✅ Обнаружена ОС: $OS_NAME $OS_VERSION"
+else
+    warning_message "Не удалось определить версию операционной системы"
+    OS_NAME="Unknown"
+    OS_VERSION="0"
+fi
+
+# Get Nexus CLI version
+echo "Проверка версии Nexus CLI..."
+if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+    if NEXUS_VERSION=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null); then
+        echo "✅ Версия Nexus CLI: $NEXUS_VERSION"
+    else
+        NEXUS_VERSION="Unknown"
+        warning_message "Не удалось определить версию Nexus CLI"
+    fi
+else
+    error_exit "Nexus CLI не найден в $HOME/.nexus/bin/nexus-network"
+fi
+
+# Check Ubuntu version compatibility
+if [[ "$OS_NAME" == *"Ubuntu"* ]]; then
+    # Extract major version number (e.g., "24.04" -> "24")
+    UBUNTU_MAJOR_VERSION=$(echo "$OS_VERSION" | cut -d'.' -f1)
+    
+    echo "Проверка совместимости Ubuntu $UBUNTU_MAJOR_VERSION с Nexus CLI..."
+    
+    if [ "$UBUNTU_MAJOR_VERSION" -lt 24 ]; then
+        echo ""
+        printf "\033[1;31m❌ КРИТИЧЕСКАЯ ОШИБКА СОВМЕСТИМОСТИ\033[0m\n"
+        printf "\033[1;31m================================================\033[0m\n"
+        echo ""
+        echo "🚫 Обнаружена несовместимая версия операционной системы!"
+        echo ""
+        echo "📋 Информация о системе:"
+        echo "   ОС: $OS_NAME $OS_VERSION"
+        echo "   Версия Nexus CLI: $NEXUS_VERSION"
+        echo ""
+        printf "\033[1;33m⚠️  ТРЕБОВАНИЯ NEXUS:\033[0m\n"
+        echo "   Nexus CLI работает только на Ubuntu 24.04 и выше"
+        echo "   Ваша версия Ubuntu $OS_VERSION не поддерживается"
+        echo ""
+        printf "\033[1;36m💡 РЕШЕНИЕ ПРОБЛЕМЫ:\033[0m\n"
+        echo "   1. Обновите Ubuntu до версии 24.04 LTS или выше"
+        echo "   2. Используйте другой сервер с Ubuntu 24.04+"
+        echo "   3. Переустановите операционную систему"
+        echo ""
+        echo "📖 Инструкция по обновлению Ubuntu:"
+        echo "   https://ubuntu.com/tutorials/upgrading-ubuntu-desktop"
+        echo ""
+        printf "\033[1;31mСкрипт остановлен из-за несовместимости версии ОС.\033[0m\n"
+        printf "\033[1;31mПожалуйста, обновите Ubuntu и запустите скрипт заново.\033[0m\n"
+        echo ""
+        exit 1
+    else
+        echo "✅ Ubuntu $OS_VERSION совместима с Nexus CLI"
+    fi
+else
+    warning_message "Обнаружена не-Ubuntu система: $OS_NAME. Nexus может работать некорректно на других ОС."
+    echo "Продолжаем установку на ваш страх и риск..."
+fi
+
+echo ""
+printf "\033[1;32m================================================\033[0m\n"
 printf "\033[1;32mПОЛУЧЕНИЕ NEXUS ID\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 
