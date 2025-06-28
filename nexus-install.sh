@@ -79,60 +79,60 @@ read SWAP_SIZE </dev/tty
 # Set default value if user doesn't enter anything
 SWAP_SIZE=${SWAP_SIZE:-12}
 
+# Always remove existing swap files first
+echo "Отключение всех файлов подкачки..."
+
+# First, try to disable all swap
+sudo swapoff -a 2>/dev/null
+
+# Wait for processes to release swap
+sleep 3
+
+# Force kill processes using swap if needed
+sudo fuser -k /swapfile 2>/dev/null || true
+sleep 2
+
+# Try multiple times to remove existing swapfile
+MAX_REMOVE_ATTEMPTS=5
+REMOVE_ATTEMPT=1
+
+while [ $REMOVE_ATTEMPT -le $MAX_REMOVE_ATTEMPTS ] && [ -f /swapfile ]; do
+    echo "Попытка удаления файла подкачки $REMOVE_ATTEMPT из $MAX_REMOVE_ATTEMPTS"
+    
+    # Disable swap on this specific file
+    sudo swapoff /swapfile 2>/dev/null || true
+    sleep 1
+    
+    # Force kill any processes still using the file
+    sudo fuser -k /swapfile 2>/dev/null || true
+    sleep 1
+    
+    # Try to remove the file
+    if sudo rm -f /swapfile 2>/dev/null; then
+        echo "✅ Старый файл подкачки удален"
+        break
+    else
+        echo "⚠️ Попытка $REMOVE_ATTEMPT: не удалось удалить /swapfile"
+        sleep 2
+    fi
+    
+    REMOVE_ATTEMPT=$((REMOVE_ATTEMPT + 1))
+done
+
+# Check if old swapfile still exists
+if [ -f /swapfile ]; then
+    error_exit "Не удалось удалить существующий файл подкачки /swapfile после $MAX_REMOVE_ATTEMPTS попыток. Возможно, файл используется системным процессом. Попробуйте перезагрузить сервер."
+fi
+
+echo "✅ Подготовка завершена"
+echo ""
+
 # Check if user wants to skip swap creation
 if [ "$SWAP_SIZE" = "0" ]; then
-    echo "✅ Пропускаем создание файла подкачки по запросу пользователя"
+    echo "✅ Пропускаем создание нового файла подкачки по запросу пользователя"
     echo ""
 else
     echo "✅ Установлен размер swap: ${SWAP_SIZE}ГБ"
-    echo ""
-
-    # Remove all existing swap files
-    echo "Отключение всех файлов подкачки..."
-
-    # First, try to disable all swap
-    sudo swapoff -a 2>/dev/null
-
-    # Wait for processes to release swap
-    sleep 3
-
-    # Force kill processes using swap if needed
-    sudo fuser -k /swapfile 2>/dev/null || true
-    sleep 2
-
-    # Try multiple times to remove existing swapfile
-    MAX_REMOVE_ATTEMPTS=5
-    REMOVE_ATTEMPT=1
-
-    while [ $REMOVE_ATTEMPT -le $MAX_REMOVE_ATTEMPTS ] && [ -f /swapfile ]; do
-        echo "Попытка удаления файла подкачки $REMOVE_ATTEMPT из $MAX_REMOVE_ATTEMPTS"
-        
-        # Disable swap on this specific file
-        sudo swapoff /swapfile 2>/dev/null || true
-        sleep 1
-        
-        # Force kill any processes still using the file
-        sudo fuser -k /swapfile 2>/dev/null || true
-        sleep 1
-        
-        # Try to remove the file
-        if sudo rm -f /swapfile 2>/dev/null; then
-            echo "✅ Старый файл подкачки удален"
-            break
-        else
-            echo "⚠️ Попытка $REMOVE_ATTEMPT: не удалось удалить /swapfile"
-            sleep 2
-        fi
-        
-        REMOVE_ATTEMPT=$((REMOVE_ATTEMPT + 1))
-    done
-
-    # Check if old swapfile still exists
-    if [ -f /swapfile ]; then
-        error_exit "Не удалось удалить существующий файл подкачки /swapfile после $MAX_REMOVE_ATTEMPTS попыток. Возможно, файл используется системным процессом. Попробуйте перезагрузить сервер."
-    fi
-
-    echo "✅ Подготовка к созданию нового файла подкачки завершена"
     echo ""
 
     # Create a new swap file with the specified size
