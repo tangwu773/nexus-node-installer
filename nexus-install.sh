@@ -611,8 +611,20 @@ echo "   tmux kill-session -t nexus"
 echo ""
 
 # Add tmux attach command to bash history for easy access
+# Try multiple approaches to ensure the command gets into history
 echo "tmux attach -t nexus" >> ~/.bash_history
-printf "\033[1;31m💡 Если вы хотите посмотреть, как работает Нода, то нажмите кнопку ВВЕРХ ↑ и Enter\033[0m\n"
+# Also add to current session history if possible
+if [ -n "$BASH" ]; then
+    history -s "tmux attach -t nexus"
+fi
+# Force bash to reload history
+if command -v bash >/dev/null 2>&1; then
+    history -r ~/.bash_history 2>/dev/null || true
+fi
+
+printf "\033[1;31m💡 Для просмотра логов работы ноды выполните команду:\033[0m\n"
+printf "\033[1;36m   tmux attach -t nexus\033[0m\n"
+printf "\033[1;31m💡 Или нажмите стрелку ВВЕРХ ↑ несколько раз, чтобы найти эту команду в истории\033[0m\n"
 echo ""
 
 printf "\033[1;32m==================================\033[0m\n"
