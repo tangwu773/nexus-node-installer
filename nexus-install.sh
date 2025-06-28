@@ -334,12 +334,31 @@ printf "\033[1;32m================================================\033[0m\n"
 # Check if Nexus CLI is already installed
 if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     echo "✅ Nexus CLI уже установлен."
+    echo ""
     
     # Get version if possible
     if NEXUS_VERSION=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null); then
         echo "Текущая версия: $NEXUS_VERSION"
     else
         echo "Версия: не удалось определить"
+        NEXUS_VERSION="unknown"
+    fi
+    
+    # Check latest version from repository
+    echo "Проверка последней версии в репозитории..."
+    if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "\(.*\)".*/\1/'); then
+        if [ -n "$LATEST_VERSION" ]; then
+            # Compare versions - if current version is different from latest, highlight in red
+            if [ "$NEXUS_VERSION" != "$LATEST_VERSION" ] && [ "$NEXUS_VERSION" != "unknown" ]; then
+                printf "Последняя версия: \033[1;31m%s\033[0m\n" "$LATEST_VERSION"
+            else
+                echo "Последняя версия: $LATEST_VERSION"
+            fi
+        else
+            echo "Последняя версия: не удалось определить"
+        fi
+    else
+        echo "Последняя версия: не удалось определить"
     fi
     
     echo ""
@@ -348,7 +367,9 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     
     case "${REINSTALL_CHOICE,,}" in
         y|yes|да|д)
-            echo "Переустанавливаем Nexus CLI..."
+            echo ""
+            echo "✅ Переустанавливаем Nexus CLI..."
+            echo ""
             # Remove existing installation
             rm -rf "$HOME/.nexus" 2>/dev/null || warning_message "Не удалось удалить старую установку"
             INSTALL_NEXUS=true
