@@ -183,7 +183,8 @@ printf "\033[1;32m================================================\033[0m\n"
 # Check if tmux session "nexus" already exists and kill it before swap operations
 if tmux has-session -t nexus 2>/dev/null; then
     echo "⚠️  Обнаружена работающая сессия tmux 'nexus' (возможно, запущен Nexus)"
-    echo "Завершаем сессию для безопасной работы со swap-файлом..."
+    echo ""
+    printf "\033[1;32mЗавершаем сессию для безопасной работы с файлом подкачки...\033[0m\n"
     tmux kill-session -t nexus 2>/dev/null || warning_message "Не удалось завершить существующую сессию"
     echo "✅ Существующая сессия завершена."
     sleep 2  # Wait for processes to fully terminate
@@ -417,6 +418,7 @@ if [ "$INSTALL_NEXUS" = true ]; then
         error_exit "Nexus CLI установлен, но исполняемый файл не найден в $HOME/.nexus/bin/nexus-network"
     fi
     
+    echo ""
     echo "✅ Nexus CLI успешно установлен."
 fi
 
