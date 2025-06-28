@@ -190,7 +190,13 @@ SWAP_SIZE=${SWAP_SIZE:-12}
 
 # Always remove existing swap files first
 echo ""
-echo "Отключаем и удаляем текущий файл подкачки..."
+
+# Check if swapfile exists before starting removal process
+SWAP_FILE_EXISTS=false
+if [ -f /swapfile ]; then
+    SWAP_FILE_EXISTS=true
+    echo "Отключаем и удаляем текущий файл подкачки..."
+fi
 
 # First, try to disable all swap
 sudo swapoff -a 2>/dev/null
@@ -205,12 +211,6 @@ sleep 1
 # Try multiple times to remove existing swapfile
 MAX_REMOVE_ATTEMPTS=5
 REMOVE_ATTEMPT=1
-SWAP_WAS_ACTIVE=false
-
-# Check if swap was active before removal
-if swapon --show 2>/dev/null | grep -q .; then
-    SWAP_WAS_ACTIVE=true
-fi
 
 while [ $REMOVE_ATTEMPT -le $MAX_REMOVE_ATTEMPTS ] && [ -f /swapfile ]; do
     # Disable swap on this specific file
@@ -236,11 +236,9 @@ if [ -f /swapfile ]; then
     error_exit "Не удалось удалить существующий файл подкачки /swapfile после $MAX_REMOVE_ATTEMPTS попыток. Возможно, файл используется системным процессом. Попробуйте перезагрузить сервер."
 fi
 
-# Show result of swap removal
-if [ "$SWAP_WAS_ACTIVE" = true ]; then
-    echo "Файл подкачки отключен и удален"
-else
-    echo "Нет активных файлов подкачки"
+# Show result of swap removal only if file existed
+if [ "$SWAP_FILE_EXISTS" = true ]; then
+    echo "Файл подкачки успешно отключен и удален"
 fi
 
 # Check if user wants to skip swap creation
