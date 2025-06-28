@@ -609,23 +609,11 @@ echo ""
 echo "❌ Полностью остановить ноду:"
 echo "   tmux kill-session -t nexus"
 echo ""
-echo "Хотите посмотреть логи работы ноды? (y/N): "
-read VIEW_LOGS_CHOICE </dev/tty
 
-case "${VIEW_LOGS_CHOICE,,}" in
-    y|yes|да|д)
-        echo ""
-        echo "🔗 Подключение к сессии с нодой..."
-        echo "Для выхода из логов без остановки ноды нажмите Ctrl+B, затем D"
-        echo ""
-        sleep 2
-        # Replace current process with tmux session
-        exec tmux attach -t nexus
-        ;;
-    *)
-        echo ""
-        ;;
-esac
+# Add tmux attach command to bash history for easy access
+echo "tmux attach -t nexus" >> ~/.bash_history
+printf "\033[1;31m💡 Если вы хотите посмотреть, как работает Нода, то нажмите кнопку ВВЕРХ ↑ и Enter\033[0m\n"
+echo ""
 
 printf "\033[1;32m==================================\033[0m\n"
 printf "\033[1;32mСкрипт выполнен успешно 🚀\033[0m\n"
