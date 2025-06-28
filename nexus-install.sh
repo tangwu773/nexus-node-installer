@@ -269,6 +269,7 @@ fi
 
 # Show result of swap removal only if file existed
 if [ "$SWAP_FILE_EXISTS" = true ]; then
+    echo ""
     echo "✅ Файл подкачки успешно отключен и удален"
 fi
 
@@ -302,6 +303,7 @@ else
             if sudo chmod 600 /swapfile; then
                 if sudo mkswap /swapfile 2>/dev/null; then
                     if sudo swapon /swapfile 2>/dev/null; then
+                        echo ""
                         echo "✅ Файл подкачки размером ${SWAP_SIZE}Гб создан"
                         break
                     else
