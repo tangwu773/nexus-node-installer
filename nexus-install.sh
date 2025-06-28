@@ -226,7 +226,7 @@ echo ""
 SWAP_FILE_EXISTS=false
 if [ -f /swapfile ]; then
     SWAP_FILE_EXISTS=true
-    echo "Отключаем и удаляем текущий файл подкачки..."
+    printf "\033[1;32m🔄 Отключаем и удаляем текущий файл подкачки...\033[0m\n"
 fi
 
 # First, try to disable all swap
@@ -269,7 +269,7 @@ fi
 
 # Show result of swap removal only if file existed
 if [ "$SWAP_FILE_EXISTS" = true ]; then
-    echo "Файл подкачки успешно отключен и удален"
+    printf "\033[1;32m✅ Файл подкачки успешно отключен и удален\033[0m\n"
 fi
 
 # Check if user wants to skip swap creation
@@ -277,7 +277,7 @@ if [ "$SWAP_SIZE" = "0" ]; then
     # Don't output anything for swap=0 case
     true
 else
-    echo "Создаем новый файл подкачки размером ${SWAP_SIZE}Гб..."
+    printf "\033[1;32m🔄 Создаем новый файл подкачки размером ${SWAP_SIZE}Гб...\033[0m\n"
 
     # Check available disk space
     AVAILABLE_SPACE=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
@@ -302,7 +302,7 @@ else
             if sudo chmod 600 /swapfile; then
                 if sudo mkswap /swapfile 2>/dev/null; then
                     if sudo swapon /swapfile 2>/dev/null; then
-                        echo "Файл подкачки размером ${SWAP_SIZE}Гб создан"
+                        printf "\033[1;32m✅ Файл подкачки размером ${SWAP_SIZE}Гб создан\033[0m\n"
                         break
                     else
                         echo "❌ Ошибка при активации swap-файла (попытка $SWAP_ATTEMPT)"
