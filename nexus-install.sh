@@ -598,7 +598,7 @@ printf "\033[1;32m📋 ПОЛЕЗНЫЕ КОМАНДЫ ДЛЯ УПРАВЛЕНИ
 printf "\033[1;32m================================================\033[0m\n"
 echo ""
 echo "🔗 Подключиться к сессии с нодой (посмотреть логи работы):"
-echo "   tmux attach -t nexus"
+echo "   tmux a -t nexus"
 echo ""
 echo "🔙 Выйти из сессии БЕЗ остановки ноды:"
 echo "   Нажмите Ctrl+B, отпустите, затем нажмите D"
@@ -610,21 +610,8 @@ echo "❌ Полностью остановить ноду:"
 echo "   tmux kill-session -t nexus"
 echo ""
 
-# Add tmux attach command to bash history for easy access
-# Try multiple approaches to ensure the command gets into history
-echo "tmux attach -t nexus" >> ~/.bash_history
-# Also add to current session history if possible
-if [ -n "$BASH" ]; then
-    history -s "tmux attach -t nexus"
-fi
-# Force bash to reload history
-if command -v bash >/dev/null 2>&1; then
-    history -r ~/.bash_history 2>/dev/null || true
-fi
-
 printf "\033[1;31m💡 Для просмотра логов работы ноды выполните команду:\033[0m\n"
-printf "\033[1;36m   tmux attach -t nexus\033[0m\n"
-printf "\033[1;31m💡 Или нажмите стрелку ВВЕРХ ↑ несколько раз, чтобы найти эту команду в истории\033[0m\n"
+printf "\033[1;36m   tmux a -t nexus\033[0m\n"
 echo ""
 
 printf "\033[1;32m==================================\033[0m\n"
