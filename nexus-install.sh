@@ -437,15 +437,13 @@ printf "\033[1;32m================================================\033[0m\n"
 printf "\033[1;32mПРОВЕРКА СОВМЕСТИМОСТИ СИСТЕМЫ\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 
-# Check OS compatibility
-echo "Проверка совместимости операционной системы..."
-
 # Get OS information
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     OS_NAME="$NAME"
     OS_VERSION="$VERSION_ID"
     echo "✅ Обнаружена ОС: $OS_NAME $OS_VERSION"
+    echo ""
 else
     warning_message "Не удалось определить версию операционной системы"
     OS_NAME="Unknown"
@@ -457,7 +455,7 @@ if [[ "$OS_NAME" == *"Ubuntu"* ]]; then
     # Extract major version number (e.g., "24.04" -> "24")
     UBUNTU_MAJOR_VERSION=$(echo "$OS_VERSION" | cut -d'.' -f1)
     
-    echo "Проверка совместимости Ubuntu $UBUNTU_MAJOR_VERSION с Nexus CLI..."
+    printf "\033[1;32mПроверка совместимости Ubuntu $UBUNTU_MAJOR_VERSION с Nexus CLI...\033[0m\n"
     
     if [ "$UBUNTU_MAJOR_VERSION" -lt 24 ]; then
         echo ""
@@ -534,7 +532,8 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     # If user didn't enter anything and we have saved ID, use it
     if [ -z "$NEXUS_ID" ] && [ -n "$SAVED_NEXUS_ID" ]; then
         NEXUS_ID="$SAVED_NEXUS_ID"
-        echo "Используем сохраненный Nexus ID: $NEXUS_ID"
+        echo "✅ Используем сохраненный Nexus ID: $NEXUS_ID"
+        echo
     fi
     
     if [ -n "$NEXUS_ID" ]; then
@@ -572,7 +571,7 @@ if tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id 
     # Wait a moment and check if the session is still running
     sleep 3
     if tmux has-session -t nexus 2>/dev/null; then
-        printf "\033[1;32m✅ Нода успешно запущена и работает\033[0m\n"
+        echo "✅ Нода успешно запущена и работает"
     else
         error_exit "Сессия tmux завершилась неожиданно. Проверьте правильность Nexus ID или запустите вручную: tmux attach -t nexus"
     fi
@@ -585,7 +584,7 @@ printf "\033[1;32m==================================\033[0m\n"
 printf "\033[1;32m🎉 УСТАНОВКА ЗАВЕРШЕНА УСПЕШНО 🎉\033[0m\n"
 printf "\033[1;32m==================================\033[0m\n"
 echo ""
-printf "\033[1;32mНода Nexus успешно запущена в фоновом режиме\033[0m\n"
+printf "\033[1;33m✅ Нода Nexus успешно запущена в фоновом режиме\033[0m\n"
 echo ""
 printf "🆔 Ваш Nexus ID: \033[1;36m$NEXUS_ID\033[0m\n"
 echo ""
@@ -610,6 +609,24 @@ echo ""
 echo "❌ Полностью остановить ноду:"
 echo "   tmux kill-session -t nexus"
 echo ""
+echo "Хотите посмотреть логи работы ноды? (y/N): "
+read VIEW_LOGS_CHOICE </dev/tty
+
+case "${VIEW_LOGS_CHOICE,,}" in
+    y|yes|да|д)
+        echo ""
+        echo "🔗 Подключение к сессии с нодой..."
+        echo "Для выхода из логов без остановки ноды нажмите Ctrl+B, затем D"
+        echo ""
+        sleep 2
+        # Attach to the tmux session
+        tmux attach -t nexus
+        ;;
+    *)
+        echo ""
+        ;;
+esac
+
 printf "\033[1;32m==================================\033[0m\n"
 printf "\033[1;32mСкрипт выполнен успешно 🚀\033[0m\n"
 printf "\033[1;32m==================================\033[0m\n"
