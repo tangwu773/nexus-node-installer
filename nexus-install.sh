@@ -124,7 +124,7 @@ show_swap_table() {
         
         echo "└──────────┴──────────┴──────────┘"
     else
-        echo "Нет активных файлов подкачки"
+        echo "✅ Нет активных файлов подкачки"
     fi
 }
 
@@ -210,6 +210,14 @@ echo "Введите размер файла подкачки в ГБ (по ум
 read SWAP_SIZE </dev/tty
 # Set default value if user doesn't enter anything
 SWAP_SIZE=${SWAP_SIZE:-12}
+
+echo ""
+if [ "$SWAP_SIZE" = "0" ]; then
+    echo "✅ Файл подкачки не нужен"
+else
+    echo "✅ Создать файл подкачки размером ${SWAP_SIZE}Гб"
+fi
+echo ""
 
 # Always remove existing swap files first
 echo ""
