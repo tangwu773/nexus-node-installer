@@ -25,6 +25,28 @@ warning_message() {
     echo "Продолжаем выполнение..."
 }
 
+# Function to save Nexus ID to file
+save_nexus_id() {
+    local nexus_id="$1"
+    local save_file="$HOME/.nexus_installer_config.json"
+    
+    # Create directory if it doesn't exist
+    mkdir -p "$(dirname "$save_file")" 2>/dev/null
+    
+    # Save ID to JSON file
+    echo "{\"last_nexus_id\": \"$nexus_id\"}" > "$save_file" 2>/dev/null
+}
+
+# Function to load saved Nexus ID
+load_saved_nexus_id() {
+    local save_file="$HOME/.nexus_installer_config.json"
+    
+    if [ -f "$save_file" ]; then
+        # Extract ID from JSON (simple grep approach)
+        grep -o '"last_nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4
+    fi
+}
+
 # Function to display memory status in Russian table format
 show_memory_status() {
     echo "┌──────────────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐"
@@ -434,6 +456,9 @@ echo "3. Нажмите кнопку 'Add CLI Node'"
 echo "4. Скопируйте появившиеся цифры - это ваш Nexus ID"
 echo ""
 
+# Load saved Nexus ID if exists
+SAVED_NEXUS_ID=$(load_saved_nexus_id)
+
 # Ask for Nexus ID and save it with retry logic
 NEXUS_ID=""
 ATTEMPT=1
@@ -446,14 +471,33 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
         echo "Nexus ID не может быть пустым"
     fi
     
-    echo "Введите ваш Nexus ID: "
+    # Show prompt with saved ID if available
+    if [ -n "$SAVED_NEXUS_ID" ]; then
+        echo "Введите ваш Nexus ID (последний: $SAVED_NEXUS_ID) или нажмите Enter для использования сохраненного: "
+    else
+        echo "Введите ваш Nexus ID: "
+    fi
+    
     read NEXUS_ID </dev/tty
     
     # Trim whitespace
     NEXUS_ID=$(echo "$NEXUS_ID" | xargs 2>/dev/null || echo "$NEXUS_ID")
     
+    # If user didn't enter anything and we have saved ID, use it
+    if [ -z "$NEXUS_ID" ] && [ -n "$SAVED_NEXUS_ID" ]; then
+        NEXUS_ID="$SAVED_NEXUS_ID"
+        echo "Используем сохраненный Nexus ID: $NEXUS_ID"
+    fi
+    
     if [ -n "$NEXUS_ID" ]; then
         echo "Получен Nexus ID: $NEXUS_ID"
+        
+        # Save the ID for future use (only if it's different from saved one)
+        if [ "$NEXUS_ID" != "$SAVED_NEXUS_ID" ]; then
+            save_nexus_id "$NEXUS_ID"
+            echo "✅ Nexus ID сохранен для следующих запусков"
+        fi
+        
         break
     fi
     
