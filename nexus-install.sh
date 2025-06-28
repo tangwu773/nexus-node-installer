@@ -334,14 +334,14 @@ printf "\033[1;32m================================================\033[0m\n"
 # Check if Nexus CLI is already installed
 if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     echo "✅ Nexus CLI уже установлен."
-    echo ''
-    printf "  \033[1;32mПроверка последней версии в репозитории...\033[0m\n"
+    echo ""
+    printf "\033[1;32mПроверка последней версии в репозитории...\033[0m\n"
     
     # Get version if possible first
     if NEXUS_VERSION=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null); then
         echo "Текущая версия: $NEXUS_VERSION"
     else
-        echo "Версия: не удалось определить"
+        echo "Текущая версия: не удалось определить"
         NEXUS_VERSION="unknown"
     fi
     
@@ -369,7 +369,6 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     else
         echo "Последняя версия: не удалось определить"
     fi
-    
     echo ""
     echo "Хотите переустановить Nexus CLI? (y/N): "
     read REINSTALL_CHOICE </dev/tty
