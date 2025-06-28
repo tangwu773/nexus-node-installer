@@ -348,9 +348,19 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     echo "Проверка последней версии в репозитории..."
     if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "\(.*\)".*/\1/'); then
         if [ -n "$LATEST_VERSION" ]; then
-            # Compare versions - if current version is different from latest, highlight in red
-            if [ "$NEXUS_VERSION" != "$LATEST_VERSION" ] && [ "$NEXUS_VERSION" != "unknown" ]; then
-                printf "Последняя версия: \033[1;31m%s\033[0m\n" "$LATEST_VERSION"
+            # Simple version comparison - highlight in red only if repository version is newer
+            # Remove 'v' prefix for comparison if present
+            CURRENT_VER_CLEAN=$(echo "$NEXUS_VERSION" | sed 's/^v//')
+            LATEST_VER_CLEAN=$(echo "$LATEST_VERSION" | sed 's/^v//')
+            
+            # Check if versions are different and current is not unknown
+            if [ "$NEXUS_VERSION" != "unknown" ] && [ "$CURRENT_VER_CLEAN" != "$LATEST_VER_CLEAN" ]; then
+                # Simple string comparison - if latest is lexicographically greater, it's likely newer
+                if [[ "$LATEST_VER_CLEAN" > "$CURRENT_VER_CLEAN" ]]; then
+                    printf "Последняя версия: \033[1;31m%s\033[0m\n" "$LATEST_VERSION"
+                else
+                    echo "Последняя версия: $LATEST_VERSION"
+                fi
             else
                 echo "Последняя версия: $LATEST_VERSION"
             fi
@@ -375,7 +385,9 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
             INSTALL_NEXUS=true
             ;;
         *)
-            echo "Используем существующую установку Nexus CLI."
+            echo ""
+            echo "✅ Используем существующую установку Nexus CLI."
+            echo ""
             INSTALL_NEXUS=false
             ;;
     esac
