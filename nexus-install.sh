@@ -271,6 +271,7 @@ fi
 if [ "$SWAP_FILE_EXISTS" = true ]; then
     echo ""
     echo "✅ Файл подкачки успешно отключен и удален"
+    echo ""
 fi
 
 # Check if user wants to skip swap creation
