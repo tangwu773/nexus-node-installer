@@ -619,8 +619,8 @@ case "${VIEW_LOGS_CHOICE,,}" in
         echo "Для выхода из логов без остановки ноды нажмите Ctrl+B, затем D"
         echo ""
         sleep 2
-        # Attach to the tmux session
-        tmux attach -t nexus
+        # Replace current process with tmux session
+        exec tmux attach -t nexus
         ;;
     *)
         echo ""
