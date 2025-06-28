@@ -333,19 +333,17 @@ printf "\033[1;32m================================================\033[0m\n"
 
 # Check if Nexus CLI is already installed
 if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
-    echo ""
     echo "✅ Nexus CLI уже установлен."
+    printf "  \033[1;32mПроверка последней версии в репозитории...\033[0m\n"
     
     # Get version if possible first
     if NEXUS_VERSION=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null); then
-        echo "Текущая версия: $NEXUS_VERSION"
+        echo "  Текущая версия: $NEXUS_VERSION"
     else
-        echo "Версия: не удалось определить"
+        echo "  Версия: не удалось определить"
         NEXUS_VERSION="unknown"
     fi
     
-    # Check latest version from repository
-    printf "\033[1;32mПроверка последней версии в репозитории...\033[0m\n"
     if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "\(.*\)".*/\1/'); then
         if [ -n "$LATEST_VERSION" ]; then
             # Simple version comparison - highlight in red only if repository version is newer
@@ -357,18 +355,18 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
             if [ "$NEXUS_VERSION" != "unknown" ] && [ "$CURRENT_VER_CLEAN" != "$LATEST_VER_CLEAN" ]; then
                 # Simple string comparison - if latest is lexicographically greater, it's likely newer
                 if [[ "$LATEST_VER_CLEAN" > "$CURRENT_VER_CLEAN" ]]; then
-                    printf "Последняя версия: \033[1;31m%s\033[0m\n" "$LATEST_VERSION"
+                    printf "  Последняя версия: \033[1;31m%s\033[0m\n" "$LATEST_VERSION"
                 else
-                    echo "Последняя версия: $LATEST_VERSION"
+                    echo "  Последняя версия: $LATEST_VERSION"
                 fi
             else
-                echo "Последняя версия: $LATEST_VERSION"
+                echo "  Последняя версия: $LATEST_VERSION"
             fi
         else
-            echo "Последняя версия: не удалось определить"
+            echo "  Последняя версия: не удалось определить"
         fi
     else
-        echo "Последняя версия: не удалось определить"
+        echo "  Последняя версия: не удалось определить"
     fi
     
     echo ""
