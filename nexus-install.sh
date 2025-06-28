@@ -338,7 +338,9 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     printf "\033[1;32mПроверка последней версии в репозитории...\033[0m\n"
     
     # Get version if possible first
-    if NEXUS_VERSION=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null); then
+    if NEXUS_VERSION_RAW=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null); then
+        # Extract just the version number from "nexus-network X.X.X" format
+        NEXUS_VERSION=$(echo "$NEXUS_VERSION_RAW" | sed 's/nexus-network //')
         echo "Текущая версия: $NEXUS_VERSION"
     else
         echo "Текущая версия: не удалось определить"
@@ -347,6 +349,9 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     
     if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "\(.*\)".*/\1/'); then
         if [ -n "$LATEST_VERSION" ]; then
+            # Remove 'v' prefix from GitHub version for display
+            LATEST_VERSION_CLEAN=$(echo "$LATEST_VERSION" | sed 's/^v//')
+            
             # Simple version comparison - highlight in red only if repository version is newer
             # Remove 'v' prefix for comparison if present
             CURRENT_VER_CLEAN=$(echo "$NEXUS_VERSION" | sed 's/^v//')
@@ -356,12 +361,12 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
             if [ "$NEXUS_VERSION" != "unknown" ] && [ "$CURRENT_VER_CLEAN" != "$LATEST_VER_CLEAN" ]; then
                 # Simple string comparison - if latest is lexicographically greater, it's likely newer
                 if [[ "$LATEST_VER_CLEAN" > "$CURRENT_VER_CLEAN" ]]; then
-                    printf "Последняя версия: \033[1;31m%s\033[0m\n" "$LATEST_VERSION"
+                    printf "Последняя версия: \033[1;31m%s\033[0m\n" "$LATEST_VERSION_CLEAN"
                 else
-                    echo "Последняя версия: $LATEST_VERSION"
+                    echo "Последняя версия: $LATEST_VERSION_CLEAN"
                 fi
             else
-                echo "Последняя версия: $LATEST_VERSION"
+                echo "Последняя версия: $LATEST_VERSION_CLEAN"
             fi
         else
             echo "Последняя версия: не удалось определить"
