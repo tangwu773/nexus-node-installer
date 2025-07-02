@@ -636,17 +636,7 @@ remove_nexus_cron
 if [ -n "$AUTO_RESTART_MINUTES" ] && [ "$AUTO_RESTART_MINUTES" -gt 0 ] 2>/dev/null; then
     add_nexus_cron "$AUTO_RESTART_MINUTES" "$NEXUS_ID"
     echo ""
-    if [ "$AUTO_RESTART_MINUTES" -lt 60 ]; then
-        echo "✅ Автоматическая перезагрузка настроена каждые $AUTO_RESTART_MINUTES минут"
-    else
-        local hours=$((AUTO_RESTART_MINUTES / 60))
-        local remaining_minutes=$((AUTO_RESTART_MINUTES % 60))
-        if [ "$remaining_minutes" -eq 0 ]; then
-            echo "✅ Автоматическая перезагрузка настроена каждые $hours часов"
-        else
-            echo "✅ Автоматическая перезагрузка настроена каждые $hours часов $remaining_minutes минут"
-        fi
-    fi
+    echo "✅ Нода будет автоматически перезагружаться каждые $AUTO_RESTART_MINUTES минут"
 else
     echo "✅ Автоматическая перезагрузка отключена"
 fi
