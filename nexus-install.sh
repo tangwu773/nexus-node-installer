@@ -37,6 +37,37 @@ save_nexus_id() {
     echo "{\"last_nexus_id\": \"$nexus_id\"}" > "$save_file" 2>/dev/null
 }
 
+# Function to remove existing nexus auto-restart cron jobs
+remove_nexus_cron() {
+    # Remove any existing nexus restart cron jobs
+    crontab -l 2>/dev/null | grep -v "nexus.*restart" | crontab - 2>/dev/null || true
+}
+
+# Function to add auto-restart cron job
+add_nexus_cron() {
+    local interval_minutes="$1"
+    local nexus_id="$2"
+    
+    # Remove existing cron jobs first
+    remove_nexus_cron
+    
+    # Calculate cron expression for given interval
+    if [ "$interval_minutes" -lt 60 ]; then
+        # Less than hour - run every N minutes
+        cron_expr="*/$interval_minutes * * * *"
+    else
+        # Hour or more - convert to hours
+        local hours=$((interval_minutes / 60))
+        cron_expr="0 */$hours * * *"
+    fi
+    
+    # Create restart command
+    local restart_cmd="tmux kill-session -t nexus 2>/dev/null; sleep 5; tmux new-session -d -s nexus \"$HOME/.nexus/bin/nexus-network start --node-id $nexus_id\" # nexus auto restart"
+    
+    # Add to crontab
+    (crontab -l 2>/dev/null; echo "$cron_expr $restart_cmd") | crontab -
+}
+
 # Function to load saved Nexus ID
 load_saved_nexus_id() {
     local save_file="$HOME/.nexus_installer_config.json"
@@ -589,18 +620,42 @@ printf "\033[1;33m✅ Нода Nexus успешно запущена в фоно
 echo ""
 printf "🆔 Ваш Nexus ID: \033[1;36m$NEXUS_ID\033[0m\n"
 echo ""
+
+# Ask about auto-restart before final messages
+echo ""
+printf "\033[1;32m================================================\033[0m\n"
+printf "\033[1;32m🔄 АВТОМАТИЧЕСКАЯ ПЕРЕЗАГРУЗКА\033[0m\n"
+printf "\033[1;32m================================================\033[0m\n"
+echo ""
+echo "Как часто автоматически перезагружать ноду? (Enter = не перезагружать, число = минуты): "
+read AUTO_RESTART_MINUTES </dev/tty
+
+# Remove any existing auto-restart cron jobs first
+remove_nexus_cron
+
+if [ -n "$AUTO_RESTART_MINUTES" ] && [ "$AUTO_RESTART_MINUTES" -gt 0 ] 2>/dev/null; then
+    add_nexus_cron "$AUTO_RESTART_MINUTES" "$NEXUS_ID"
+    echo ""
+    if [ "$AUTO_RESTART_MINUTES" -lt 60 ]; then
+        echo "✅ Автоматическая перезагрузка настроена каждые $AUTO_RESTART_MINUTES минут"
+    else
+        local hours=$((AUTO_RESTART_MINUTES / 60))
+        local remaining_minutes=$((AUTO_RESTART_MINUTES % 60))
+        if [ "$remaining_minutes" -eq 0 ]; then
+            echo "✅ Автоматическая перезагрузка настроена каждые $hours часов"
+        else
+            echo "✅ Автоматическая перезагрузка настроена каждые $hours часов $remaining_minutes минут"
+        fi
+    fi
+else
+    echo "✅ Автоматическая перезагрузка отключена"
+fi
+
+echo ""
 printf "\033[1;33m✅ Вы можете свободно закрывать терминал - нода продолжит работу\033[0m\n"
 echo "✅ Проверить статус ноды и начисление очков можно на странице:"
 echo "   https://app.nexus.xyz/nodes"
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
 printf "\033[1;32m📋 УПРАВЛЕНИЕ НОДОЙ\033[0m\n"
-printf "\033[1;32m================================================\033[0m\n"
-echo ""
-printf "\033[1;31m🔗 Просмотр логов: tmux a -t nexus\033[0m\n"
-printf "\033[1;33m🔙 Выход из логов: Ctrl+B, затем D\033[0m\n"
-printf "❌ Остановка ноды: tmux kill-session -t nexus\n"
-echo ""
-printf "\033[1;32m==================================\033[0m\n"
-printf "\033[1;32mСкрипт выполнен успешно 🚀\033[0m\n"
-printf "\033[1;32m==================================\033[0m\n"
+printf "\033[1;32m================================================\033
