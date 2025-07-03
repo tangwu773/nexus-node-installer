@@ -43,13 +43,16 @@ remove_nexus_cron() {
     crontab -l 2>/dev/null | grep -v "nexus.*restart" | crontab - 2>/dev/null || true
 }
 
-# Function to add auto-restart cron job
+# Function to add auto-restart cron job with auto-update
 add_nexus_cron() {
     local interval_minutes="$1"
     local nexus_id="$2"
     
     # Remove existing cron jobs first
     remove_nexus_cron
+    
+    # Create auto-restart script with update functionality
+    local restart_script=$(create_auto_restart_script)
     
     # Calculate cron expression for given interval
     if [ "$interval_minutes" -lt 60 ]; then
@@ -61,8 +64,8 @@ add_nexus_cron() {
         cron_expr="0 */$hours * * *"
     fi
     
-    # Create restart command
-    local restart_cmd="tmux kill-session -t nexus 2>/dev/null; sleep 5; tmux new-session -d -s nexus \"$HOME/.nexus/bin/nexus-network start --node-id $nexus_id\" # nexus auto restart"
+    # Create restart command using the script
+    local restart_cmd="$restart_script $nexus_id # nexus auto restart"
     
     # Add to crontab
     (crontab -l 2>/dev/null; echo "$cron_expr $restart_cmd") | crontab -
@@ -76,6 +79,100 @@ load_saved_nexus_id() {
         # Extract ID from JSON (simple grep approach)
         grep -o '"last_nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4
     fi
+}
+
+# Function to create auto-restart script with update functionality
+create_auto_restart_script() {
+    local script_path="$HOME/.nexus/auto_restart.sh"
+    
+    # Create .nexus directory if it doesn't exist
+    mkdir -p "$HOME/.nexus" 2>/dev/null
+    
+    # Create the auto-restart script
+    cat > "$script_path" << 'AUTO_RESTART_EOF'
+#!/bin/bash
+
+# Auto-restart script with auto-update functionality
+# Arguments: $1 = nexus_id
+
+NEXUS_ID="$1"
+UPDATE_MARKER="$HOME/.nexus_last_update"
+CURRENT_TIME=$(date +%s)
+
+# Function for silent Nexus CLI update
+update_nexus_cli_silent() {
+    # Check if update is needed (max once per hour)
+    if [ ! -f "$UPDATE_MARKER" ] || [ $((CURRENT_TIME - $(cat "$UPDATE_MARKER" 2>/dev/null || echo 0))) -gt 3600 ]; then
+        # Stop existing session for update
+        tmux kill-session -t nexus 2>/dev/null || true
+        sleep 2
+        
+        # Check versions
+        local current_version=""
+        local latest_version=""
+        
+        if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+            current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
+        fi
+        
+        latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "v\?\(.*\)".*/\1/')
+        
+        # Update only if needed
+        if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
+            # Install expect if needed
+            if ! command -v expect >/dev/null 2>&1; then
+                if command -v apt >/dev/null 2>&1; then
+                    sudo apt update >/dev/null 2>&1 && sudo apt install -y expect >/dev/null 2>&1
+                elif command -v yum >/dev/null 2>&1; then
+                    sudo yum install -y expect >/dev/null 2>&1
+                fi
+            fi
+            
+            # Create expect script
+            local expect_script=$(mktemp)
+            cat > "$expect_script" << 'EXPECT_EOF'
+#!/usr/bin/expect -f
+set timeout 60
+log_user 0
+spawn sh -c "curl -sSL https://cli.nexus.xyz/ | sh"
+expect {
+    "*Terms of Use*" { send "Y\r"; exp_continue }
+    "*Do you agree*" { send "Y\r"; exp_continue }
+    "*Accept*" { send "Y\r"; exp_continue }
+    "*Continue*" { send "Y\r"; exp_continue }
+    "*yes/no*" { send "yes\r"; exp_continue }
+    "*y/n*" { send "y\r"; exp_continue }
+    eof { exit 0 }
+    timeout { exit 1 }
+}
+EXPECT_EOF
+            
+            # Execute update
+            chmod +x "$expect_script"
+            if "$expect_script" >/dev/null 2>&1; then
+                echo "$CURRENT_TIME" > "$UPDATE_MARKER"
+            fi
+            rm -f "$expect_script"
+        else
+            # Mark as checked even if no update needed
+            echo "$CURRENT_TIME" > "$UPDATE_MARKER"
+        fi
+    fi
+}
+
+# Perform auto-update check
+update_nexus_cli_silent
+
+# Restart the node
+tmux kill-session -t nexus 2>/dev/null || true
+sleep 5
+tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID"
+AUTO_RESTART_EOF
+    
+    # Make the script executable
+    chmod +x "$script_path"
+    
+    echo "$script_path"
 }
 
 # Полностью автоматическая функция установки/обновления Nexus CLI
@@ -704,6 +801,7 @@ if [ -n "$AUTO_RESTART_MINUTES" ] && [ "$AUTO_RESTART_MINUTES" -gt 0 ] 2>/dev/nu
     add_nexus_cron "$AUTO_RESTART_MINUTES" "$NEXUS_ID"
     echo ""
     echo "✅ Нода будет автоматически перезагружаться каждые $AUTO_RESTART_MINUTES минут"
+    echo "✅ Автообновление Nexus CLI включено (проверка раз в час)"
 else
     echo "✅ Автоматическая перезагрузка отключена"
 fi
