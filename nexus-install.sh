@@ -451,9 +451,100 @@ if [ "$INSTALL_NEXUS" = true ]; then
         error_exit "curl не найден. Установите curl для продолжения."
     fi
     
-    # Try multiple methods to automatically answer the installation prompt
-    if ! { echo "Y"; echo "y"; echo "yes"; } | curl https://cli.nexus.xyz/ | sh; then
-        error_exit "Не удалось установить Nexus CLI. Проверьте интернет-соединение."
+    # Check if expect is available, install if needed
+    if ! command -v expect &> /dev/null; then
+        echo "Установка expect для автоматизации..."
+        if [ -x "$(command -v apt)" ]; then
+            if ! sudo apt update >/dev/null 2>&1; then
+                warning_message "Не удалось обновить список пакетов"
+            fi
+            if ! sudo apt install -y expect >/dev/null 2>&1; then
+                warning_message "Не удалось установить expect, попробуем без автоматизации"
+                USE_EXPECT=false
+            else
+                USE_EXPECT=true
+            fi
+        elif [ -x "$(command -v yum)" ]; then
+            if ! sudo yum install -y expect >/dev/null 2>&1; then
+                warning_message "Не удалось установить expect, попробуем без автоматизации"
+                USE_EXPECT=false
+            else
+                USE_EXPECT=true
+            fi
+        else
+            warning_message "Не удалось определить менеджер пакетов для установки expect"
+            USE_EXPECT=false
+        fi
+    else
+        USE_EXPECT=true
+    fi
+    
+    # Try to install with expect automation
+    if [ "$USE_EXPECT" = true ]; then
+        echo "Используем автоматизированную установку..."
+        
+        # Create temporary expect script
+        EXPECT_SCRIPT=$(mktemp)
+        cat > "$EXPECT_SCRIPT" << 'EOF'
+#!/usr/bin/expect -f
+set timeout 60
+spawn sh -c "curl https://cli.nexus.xyz/ | sh"
+expect {
+    "*Terms of Use*" {
+        send "Y\r"
+        exp_continue
+    }
+    "*Do you agree*" {
+        send "Y\r"
+        exp_continue
+    }
+    "*Accept*" {
+        send "Y\r"
+        exp_continue
+    }
+    "*Continue*" {
+        send "Y\r"
+        exp_continue
+    }
+    "*yes/no*" {
+        send "yes\r"
+        exp_continue
+    }
+    "*y/n*" {
+        send "y\r"
+        exp_continue
+    }
+    eof
+}
+EOF
+        
+        # Make script executable and run it
+        chmod +x "$EXPECT_SCRIPT"
+        
+        if "$EXPECT_SCRIPT"; then
+            echo "✅ Автоматизированная установка завершена"
+            rm -f "$EXPECT_SCRIPT"
+        else
+            echo "⚠️ Автоматизированная установка не удалась, попробуем обычную..."
+            rm -f "$EXPECT_SCRIPT"
+            # Fallback to manual installation
+            echo ""
+            echo "ВНИМАНИЕ: Потребуется ручное подтверждение установки Nexus CLI"
+            echo "Нажмите 'Y' когда появится запрос о согласии с условиями использования"
+            echo ""
+            if ! curl https://cli.nexus.xyz/ | sh; then
+                error_exit "Не удалось установить Nexus CLI. Проверьте интернет-соединение."
+            fi
+        fi
+    else
+        # Manual installation without expect
+        echo ""
+        echo "ВНИМАНИЕ: Потребуется ручное подтверждение установки Nexus CLI"
+        echo "Нажмите 'Y' когда появится запрос о согласии с условиями использования"
+        echo ""
+        if ! curl https://cli.nexus.xyz/ | sh; then
+            error_exit "Не удалось установить Nexus CLI. Проверьте интернет-соединение."
+        fi
     fi
     
     # Verify that nexus-network binary was installed
