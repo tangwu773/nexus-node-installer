@@ -78,6 +78,97 @@ load_saved_nexus_id() {
     fi
 }
 
+# Полностью автоматическая функция установки/обновления Nexus CLI
+# Возвращает: 0 = успех, 1 = ошибка, 2 = уже актуальная версия
+update_nexus_cli() {
+    local force_reinstall="${1:-false}"
+    local quiet_mode="${2:-false}"
+    
+    # Функция для логирования (только если не тихий режим)
+    log_message() {
+        [ "$quiet_mode" = "false" ] && echo "$1"
+    }
+    
+    # Проверка текущей и последней версии
+    local current_version=""
+    local latest_version=""
+    
+    if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+        current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
+    fi
+    
+    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "v\?\(.*\)".*/\1/')
+    
+    # Проверка необходимости обновления
+    if [ "$force_reinstall" = "false" ] && [ -n "$current_version" ] && [ "$current_version" = "$latest_version" ]; then
+        log_message "✅ Nexus CLI уже актуален (версия $current_version)"
+        return 2
+    fi
+    
+    log_message "🔄 Обновление Nexus CLI..."
+    [ -n "$current_version" ] && log_message "Текущая: $current_version"
+    [ -n "$latest_version" ] && log_message "Последняя: $latest_version"
+    
+    # Остановка существующих процессов
+    tmux kill-session -t nexus 2>/dev/null || true
+    sleep 2
+    
+    # Проверка curl
+    if ! command -v curl &> /dev/null; then
+        log_message "❌ curl не найден. Установите curl для продолжения."
+        return 1
+    fi
+    
+    # Установка expect если нужно
+    if ! command -v expect >/dev/null 2>&1; then
+        log_message "Установка expect..."
+        if command -v apt >/dev/null 2>&1; then
+            sudo apt update >/dev/null 2>&1 && sudo apt install -y expect >/dev/null 2>&1
+        elif command -v yum >/dev/null 2>&1; then
+            sudo yum install -y expect >/dev/null 2>&1
+        fi
+    fi
+    
+    # Создание временного expect-скрипта для автоматизации
+    local expect_script=$(mktemp)
+    cat > "$expect_script" << 'EXPECT_EOF'
+#!/usr/bin/expect -f
+set timeout 60
+log_user 0
+spawn sh -c "curl -sSL https://cli.nexus.xyz/ | sh"
+expect {
+    "*Terms of Use*" { send "Y\r"; exp_continue }
+    "*Do you agree*" { send "Y\r"; exp_continue }
+    "*Accept*" { send "Y\r"; exp_continue }
+    "*Continue*" { send "Y\r"; exp_continue }
+    "*yes/no*" { send "yes\r"; exp_continue }
+    "*y/n*" { send "y\r"; exp_continue }
+    eof { exit 0 }
+    timeout { exit 1 }
+}
+EXPECT_EOF
+    
+    # Выполнение обновления
+    chmod +x "$expect_script"
+    if "$expect_script" >/dev/null 2>&1; then
+        rm -f "$expect_script"
+        
+        # Проверка успешности установки
+        if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+            local new_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
+            log_message "✅ Nexus CLI обновлен до версии $new_version"
+            return 0
+        else
+            log_message "❌ Ошибка: исполняемый файл не найден после установки"
+            return 1
+        fi
+    else
+        rm -f "$expect_script"
+        log_message "❌ Ошибка при обновлении Nexus CLI"
+        return 1
+    fi
+}
+
 # Function to display memory status in Russian table format
 show_memory_status() {
     echo "┌──────────────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐"
@@ -374,15 +465,14 @@ printf "\033[1;32m================================================\033[0m\n"
 printf "\033[1;32mУСТАНОВКА NEXUS CLI\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 
-# Check if Nexus CLI is already installed
+# Check if Nexus CLI is already installed and show version info
 if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     echo "✅ Nexus CLI уже установлен."
     echo ""
     printf "\033[1;32mПроверка последней версии в репозитории...\033[0m\n"
     
-    # Get version if possible first
+    # Get current version
     if NEXUS_VERSION_RAW=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null); then
-        # Extract just the version number from "nexus-network X.X.X" format
         NEXUS_VERSION=$(echo "$NEXUS_VERSION_RAW" | sed 's/nexus-network //')
         echo "Текущая версия: $NEXUS_VERSION"
     else
@@ -390,20 +480,14 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         NEXUS_VERSION="unknown"
     fi
     
+    # Get latest version
     if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "\(.*\)".*/\1/'); then
         if [ -n "$LATEST_VERSION" ]; then
-            # Remove 'v' prefix from GitHub version for display
             LATEST_VERSION_CLEAN=$(echo "$LATEST_VERSION" | sed 's/^v//')
-            
-            # Simple version comparison - highlight in red only if repository version is newer
-            # Remove 'v' prefix for comparison if present
             CURRENT_VER_CLEAN=$(echo "$NEXUS_VERSION" | sed 's/^v//')
-            LATEST_VER_CLEAN=$(echo "$LATEST_VERSION" | sed 's/^v//')
             
-            # Check if versions are different and current is not unknown
-            if [ "$NEXUS_VERSION" != "unknown" ] && [ "$CURRENT_VER_CLEAN" != "$LATEST_VER_CLEAN" ]; then
-                # Simple string comparison - if latest is lexicographically greater, it's likely newer
-                if [[ "$LATEST_VER_CLEAN" > "$CURRENT_VER_CLEAN" ]]; then
+            if [ "$NEXUS_VERSION" != "unknown" ] && [ "$CURRENT_VER_CLEAN" != "$LATEST_VERSION_CLEAN" ]; then
+                if [[ "$LATEST_VERSION_CLEAN" > "$CURRENT_VER_CLEAN" ]]; then
                     printf "Последняя версия: \033[1;31m%s\033[0m\n" "$LATEST_VERSION_CLEAN"
                 else
                     echo "Последняя версия: $LATEST_VERSION_CLEAN"
@@ -417,6 +501,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     else
         echo "Последняя версия: не удалось определить"
     fi
+    
     echo ""
     echo "Переустановить Nexus CLI? (Enter = нет, y = да): "
     read REINSTALL_CHOICE </dev/tty
@@ -425,135 +510,25 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         y|yes|да|д)
             echo ""
             echo "✅ Переустанавливаем Nexus CLI..."
-            echo ""
-            # Remove existing installation
-            rm -rf "$HOME/.nexus" 2>/dev/null || warning_message "Не удалось удалить старую установку"
-            INSTALL_NEXUS=true
+            if update_nexus_cli true false; then
+                echo "✅ Nexus CLI успешно переустановлен."
+            else
+                error_exit "Не удалось переустановить Nexus CLI"
+            fi
             ;;
         *)
             echo ""
             echo "✅ Используем существующую установку Nexus CLI."
-            echo ""
-            INSTALL_NEXUS=false
             ;;
     esac
 else
     echo "Nexus CLI не установлен."
-    INSTALL_NEXUS=true
-fi
-
-# Install Nexus CLI if needed
-if [ "$INSTALL_NEXUS" = true ]; then
     echo "Установка Nexus CLI..."
-    
-    # Check if curl is available
-    if ! command -v curl &> /dev/null; then
-        error_exit "curl не найден. Установите curl для продолжения."
-    fi
-    
-    # Check if expect is available, install if needed
-    if ! command -v expect &> /dev/null; then
-        echo "Установка expect для автоматизации..."
-        if [ -x "$(command -v apt)" ]; then
-            if ! sudo apt update >/dev/null 2>&1; then
-                warning_message "Не удалось обновить список пакетов"
-            fi
-            if ! sudo apt install -y expect >/dev/null 2>&1; then
-                warning_message "Не удалось установить expect, попробуем без автоматизации"
-                USE_EXPECT=false
-            else
-                USE_EXPECT=true
-            fi
-        elif [ -x "$(command -v yum)" ]; then
-            if ! sudo yum install -y expect >/dev/null 2>&1; then
-                warning_message "Не удалось установить expect, попробуем без автоматизации"
-                USE_EXPECT=false
-            else
-                USE_EXPECT=true
-            fi
-        else
-            warning_message "Не удалось определить менеджер пакетов для установки expect"
-            USE_EXPECT=false
-        fi
+    if update_nexus_cli false false; then
+        echo "✅ Nexus CLI успешно установлен."
     else
-        USE_EXPECT=true
+        error_exit "Не удалось установить Nexus CLI"
     fi
-    
-    # Try to install with expect automation
-    if [ "$USE_EXPECT" = true ]; then
-        echo "Используем автоматизированную установку..."
-        
-        # Create temporary expect script
-        EXPECT_SCRIPT=$(mktemp)
-        cat > "$EXPECT_SCRIPT" << 'EOF'
-#!/usr/bin/expect -f
-set timeout 60
-spawn sh -c "curl https://cli.nexus.xyz/ | sh"
-expect {
-    "*Terms of Use*" {
-        send "Y\r"
-        exp_continue
-    }
-    "*Do you agree*" {
-        send "Y\r"
-        exp_continue
-    }
-    "*Accept*" {
-        send "Y\r"
-        exp_continue
-    }
-    "*Continue*" {
-        send "Y\r"
-        exp_continue
-    }
-    "*yes/no*" {
-        send "yes\r"
-        exp_continue
-    }
-    "*y/n*" {
-        send "y\r"
-        exp_continue
-    }
-    eof
-}
-EOF
-        
-        # Make script executable and run it
-        chmod +x "$EXPECT_SCRIPT"
-        
-        if "$EXPECT_SCRIPT"; then
-            echo "✅ Автоматизированная установка завершена"
-            rm -f "$EXPECT_SCRIPT"
-        else
-            echo "⚠️ Автоматизированная установка не удалась, попробуем обычную..."
-            rm -f "$EXPECT_SCRIPT"
-            # Fallback to manual installation
-            echo ""
-            echo "ВНИМАНИЕ: Потребуется ручное подтверждение установки Nexus CLI"
-            echo "Нажмите 'Y' когда появится запрос о согласии с условиями использования"
-            echo ""
-            if ! curl https://cli.nexus.xyz/ | sh; then
-                error_exit "Не удалось установить Nexus CLI. Проверьте интернет-соединение."
-            fi
-        fi
-    else
-        # Manual installation without expect
-        echo ""
-        echo "ВНИМАНИЕ: Потребуется ручное подтверждение установки Nexus CLI"
-        echo "Нажмите 'Y' когда появится запрос о согласии с условиями использования"
-        echo ""
-        if ! curl https://cli.nexus.xyz/ | sh; then
-            error_exit "Не удалось установить Nexus CLI. Проверьте интернет-соединение."
-        fi
-    fi
-    
-    # Verify that nexus-network binary was installed
-    if [ ! -f "$HOME/.nexus/bin/nexus-network" ]; then
-        error_exit "Nexus CLI установлен, но исполняемый файл не найден в $HOME/.nexus/bin/nexus-network"
-    fi
-    
-    echo ""
-    echo "✅ Nexus CLI успешно установлен."
 fi
 
 echo ""
