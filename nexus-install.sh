@@ -451,7 +451,7 @@ if [ "$INSTALL_NEXUS" = true ]; then
         error_exit "curl не найден. Установите curl для продолжения."
     fi
     
-    if ! yes | curl https://cli.nexus.xyz/ | sh; then
+    if ! printf "Y\n" | curl https://cli.nexus.xyz/ | sh; then
         error_exit "Не удалось установить Nexus CLI. Проверьте интернет-соединение."
     fi
     
