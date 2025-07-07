@@ -29,15 +29,55 @@ warning_message() {
 save_nexus_id() {
     local nexus_id="$1"
     local save_file="$HOME/.nexus_installer_config.json"
+    local current_time=$(date +%s)
     
     # Create directory if it doesn't exist
     mkdir -p "$(dirname "$save_file")" 2>/dev/null
     
-    # Save ID to JSON file
-    echo "{\"last_nexus_id\": \"$nexus_id\"}" > "$save_file" 2>/dev/null
+    # Preserve existing update time if available
+    local existing_update_time=0
+    if [ -f "$save_file" ]; then
+        existing_update_time=$(grep -o '"last_update_check": [0-9]*' "$save_file" 2>/dev/null | cut -d':' -f2 | tr -d ' ' || echo 0)
+    fi
+    
+    # Save to new JSON structure
+    echo "{\"nexus_id\": \"$nexus_id\", \"last_update_check\": $existing_update_time}" > "$save_file" 2>/dev/null
 }
 
+# Function to save update check time to JSON config
+save_update_check_time() {
+    local update_time="$1"
+    local save_file="$HOME/.nexus_installer_config.json"
+    
+    # Create directory if it doesn't exist
+    mkdir -p "$(dirname "$save_file")" 2>/dev/null
+    
+    # Get existing nexus_id
+    local existing_nexus_id=""
+    if [ -f "$save_file" ]; then
+        existing_nexus_id=$(grep -o '"nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4 || \
+                           grep -o '"last_nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4)
+    fi
+    
+    # Save to JSON with both parameters
+    if [ -n "$existing_nexus_id" ]; then
+        echo "{\"nexus_id\": \"$existing_nexus_id\", \"last_update_check\": $update_time}" > "$save_file" 2>/dev/null
+    else
+        echo "{\"nexus_id\": \"\", \"last_update_check\": $update_time}" > "$save_file" 2>/dev/null
+    fi
+}
 
+# Function to load update check time from JSON config
+load_update_check_time() {
+    local save_file="$HOME/.nexus_installer_config.json"
+    
+    if [ -f "$save_file" ]; then
+        # Extract update time from JSON
+        grep -o '"last_update_check": [0-9]*' "$save_file" 2>/dev/null | cut -d':' -f2 | tr -d ' ' || echo 0
+    else
+        echo 0
+    fi
+}
 
 # Function to remove existing nexus auto-restart cron jobs
 remove_nexus_cron() {
@@ -78,7 +118,9 @@ load_saved_nexus_id() {
     local save_file="$HOME/.nexus_installer_config.json"
     
     if [ -f "$save_file" ]; then
-        # Extract ID from JSON (simple grep approach)
+        # Extract ID from new JSON structure
+        grep -o '"nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4 || \
+        # Fallback to old structure for backward compatibility
         grep -o '"last_nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4
     fi
 }
@@ -98,13 +140,46 @@ create_auto_restart_script() {
 # Arguments: $1 = nexus_id
 
 NEXUS_ID="$1"
-UPDATE_MARKER="$HOME/.nexus_last_update"
+CONFIG_FILE="$HOME/.nexus_installer_config.json"
 CURRENT_TIME=$(date +%s)
+
+# Function to load update check time from JSON config
+load_update_check_time() {
+    if [ -f "$CONFIG_FILE" ]; then
+        grep -o '"last_update_check": [0-9]*' "$CONFIG_FILE" 2>/dev/null | cut -d':' -f2 | tr -d ' ' || echo 0
+    else
+        echo 0
+    fi
+}
+
+# Function to save update check time to JSON config
+save_update_check_time() {
+    local update_time="$1"
+    
+    # Create directory if it doesn't exist
+    mkdir -p "$(dirname "$CONFIG_FILE")" 2>/dev/null
+    
+    # Get existing nexus_id
+    local existing_nexus_id=""
+    if [ -f "$CONFIG_FILE" ]; then
+        existing_nexus_id=$(grep -o '"nexus_id": "[^"]*"' "$CONFIG_FILE" 2>/dev/null | cut -d'"' -f4 || \
+                           grep -o '"last_nexus_id": "[^"]*"' "$CONFIG_FILE" 2>/dev/null | cut -d'"' -f4)
+    fi
+    
+    # Save to JSON with both parameters
+    if [ -n "$existing_nexus_id" ]; then
+        echo "{\"nexus_id\": \"$existing_nexus_id\", \"last_update_check\": $update_time}" > "$CONFIG_FILE" 2>/dev/null
+    else
+        echo "{\"nexus_id\": \"$NEXUS_ID\", \"last_update_check\": $update_time}" > "$CONFIG_FILE" 2>/dev/null
+    fi
+}
 
 # Function for silent Nexus CLI update
 update_nexus_cli_silent() {
+    local last_update_time=$(load_update_check_time)
+    
     # Check if update is needed (max once per hour)
-    if [ ! -f "$UPDATE_MARKER" ] || [ $((CURRENT_TIME - $(cat "$UPDATE_MARKER" 2>/dev/null || echo 0))) -gt 3600 ]; then
+    if [ $((CURRENT_TIME - last_update_time)) -gt 3600 ]; then
         # Stop existing session for update
         tmux kill-session -t nexus 2>/dev/null || true
         sleep 2
@@ -125,12 +200,12 @@ update_nexus_cli_silent() {
             if NONINTERACTIVE=1 curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
                 # Verify installation was successful
                 if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
-                    echo "$CURRENT_TIME" > "$UPDATE_MARKER"
+                    save_update_check_time "$CURRENT_TIME"
                 fi
             fi
         else
             # Mark as checked even if no update needed
-            echo "$CURRENT_TIME" > "$UPDATE_MARKER"
+            save_update_check_time "$CURRENT_TIME"
         fi
     fi
 }
