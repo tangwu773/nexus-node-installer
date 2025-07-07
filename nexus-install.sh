@@ -192,7 +192,7 @@ update_nexus_cli_silent() {
             current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
         fi
         
-        latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed "s/.*\"tag_name\": \"v\?(.*)\".*/\\1/")
+        latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed -E "s/.*\"tag_name\": \"v?([^\"]*)\".*/\\1/")
         
         # Update only if needed
         if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
@@ -256,7 +256,7 @@ update_nexus_cli() {
         current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
     fi
     
-    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed "s/.*\"tag_name\": \"v\?(.*)\".*/\\1/")
+    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed -E "s/.*\"tag_name\": \"v?([^\"]*)\".*/\\1/")
     
     # Проверка необходимости обновления
     if [ "$force_reinstall" = "false" ] && [ "$is_first_install" = "false" ] && [ -n "$current_version" ] && [ "$current_version" = "$latest_version" ]; then
@@ -625,7 +625,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     fi
     
     # Get latest version
-    if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed "s/.*\"tag_name\": \"v\?(.*)\".*/\\1/"); then
+    if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed -E "s/.*\"tag_name\": \"v?([^\"]*)\".*/\\1/"); then
         if [ -n "$LATEST_VERSION" ]; then
             LATEST_VERSION_CLEAN=$(echo "$LATEST_VERSION" | sed 's/^v//')
             CURRENT_VER_CLEAN=$(echo "$NEXUS_VERSION" | sed 's/^v//')
