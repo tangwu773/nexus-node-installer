@@ -196,12 +196,18 @@ update_nexus_cli_silent() {
         
         # Update only if needed
         if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
-            # Update using non-interactive mode, подаем пустой ввод чтобы не зависало
-            if echo | NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
-                # Verify installation was successful
-                if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
-                    save_update_check_time "$CURRENT_TIME"
+            # Официальный способ: скачать install.sh и запустить с NONINTERACTIVE=1
+            installer_dir="$HOME/.nexus"
+            installer_file="$installer_dir/install.sh"
+            mkdir -p "$installer_dir"
+            if curl -sSf https://cli.nexus.xyz/ -o "$installer_file"; then
+                chmod +x "$installer_file"
+                if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
+                    if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+                        save_update_check_time "$CURRENT_TIME"
+                    fi
                 fi
+                rm -f "$installer_file"
             fi
         else
             # Mark as checked even if no update needed
@@ -250,7 +256,7 @@ update_nexus_cli() {
         current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
     fi
     
-    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "v\?\(.*\)".*/\1/')
+    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "v\?(.*)".*/\1/')
     
     # Проверка необходимости обновления
     if [ "$force_reinstall" = "false" ] && [ "$is_first_install" = "false" ] && [ -n "$current_version" ] && [ "$current_version" = "$latest_version" ]; then
@@ -283,13 +289,24 @@ update_nexus_cli() {
             return 1
         fi
     else
-        # Обновление или переустановка - неинтерактивное, подаем пустой ввод чтобы не зависало
-        if echo | NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
-            local new_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
-            log_message "✅ Nexus CLI $([ "$force_reinstall" = "true" ] && echo "переустановлен" || echo "обновлен") до версии $new_version"
-            return 0
+        # Обновление или переустановка - неинтерактивное через install.sh (официально)
+        local installer_dir="$HOME/.nexus"
+        local installer_file="$installer_dir/install.sh"
+        mkdir -p "$installer_dir"
+        if curl -sSf https://cli.nexus.xyz/ -o "$installer_file"; then
+            chmod +x "$installer_file"
+            if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
+                local new_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
+                log_message "✅ Nexus CLI $([ "$force_reinstall" = "true" ] && echo "переустановлен" || echo "обновлен") до версии $new_version"
+                rm -f "$installer_file"
+                return 0
+            else
+                log_message "❌ Ошибка при $([ "$force_reinstall" = "true" ] && echo "переустановке" || echo "обновлении") Nexus CLI"
+                rm -f "$installer_file"
+                return 1
+            fi
         else
-            log_message "❌ Ошибка при $([ "$force_reinstall" = "true" ] && echo "переустановке" || echo "обновлении") Nexus CLI"
+            log_message "❌ Не удалось скачать официальный install.sh для Nexus CLI"
             return 1
         fi
     fi
