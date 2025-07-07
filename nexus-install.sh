@@ -197,7 +197,7 @@ update_nexus_cli_silent() {
         # Update only if needed
         if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
             # Update using non-interactive mode
-            if NONINTERACTIVE=1 curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
+            if NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
                 # Verify installation was successful
                 if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                     save_update_check_time "$CURRENT_TIME"
@@ -258,7 +258,7 @@ update_nexus_cli() {
         return 2
     fi
     
-    log_message "🔄 $([ "$is_first_install" = "true" ] && echo "Установка" || echo "Обновление") Nexus CLI..."
+    log_message "🔄 $([ "$is_first_install" = "true" ] && echo "Установка" || ([ "$force_reinstall" = "true" ] && echo "Переустановка" || echo "Обновление")) Nexus CLI..."
     [ -n "$current_version" ] && log_message "Текущая: $current_version"
     [ -n "$latest_version" ] && log_message "Последняя: $latest_version"
     
@@ -283,13 +283,13 @@ update_nexus_cli() {
             return 1
         fi
     else
-        # Обновление - неинтерактивное
-        if NONINTERACTIVE=1 curl -sSL https://cli.nexus.xyz/ | sh; then
+        # Обновление или переустановка - неинтерактивное
+        if NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
             local new_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
-            log_message "✅ Nexus CLI обновлен до версии $new_version"
+            log_message "✅ Nexus CLI $([ "$force_reinstall" = "true" ] && echo "переустановлен" || echo "обновлен") до версии $new_version"
             return 0
         else
-            log_message "❌ Ошибка при обновлении Nexus CLI"
+            log_message "❌ Ошибка при $([ "$force_reinstall" = "true" ] && echo "переустановке" || echo "обновлении") Nexus CLI"
             return 1
         fi
     fi
