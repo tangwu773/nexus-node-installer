@@ -189,10 +189,10 @@ update_nexus_cli_silent() {
         local latest_version=""
         
         if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
-            current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
+            current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
         fi
         
-        latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "v\?\(.*\)".*/\1/')
+        latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed "s/.*\"tag_name\": \"v\?(.*)\".*/\\1/")
         
         # Update only if needed
         if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
@@ -253,10 +253,10 @@ update_nexus_cli() {
     local latest_version=""
     
     if [ "$is_first_install" = "false" ]; then
-        current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
+        current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
     fi
     
-    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "v\?\(.*\)".*/\1/')
+    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed "s/.*\"tag_name\": \"v\?(.*)\".*/\\1/")
     
     # Проверка необходимости обновления
     if [ "$force_reinstall" = "false" ] && [ "$is_first_install" = "false" ] && [ -n "$current_version" ] && [ "$current_version" = "$latest_version" ]; then
@@ -296,7 +296,7 @@ update_nexus_cli() {
         if curl -sSf https://cli.nexus.xyz/ -o "$installer_file"; then
             chmod +x "$installer_file"
             if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
-                local new_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
+                local new_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
                 log_message "✅ Nexus CLI $([ "$force_reinstall" = "true" ] && echo "переустановлен" || echo "обновлен") до версии $new_version"
                 rm -f "$installer_file"
                 return 0
@@ -625,7 +625,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     fi
     
     # Get latest version
-    if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "\(.*\)".*/\1/'); then
+    if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed "s/.*\"tag_name\": \"v\?(.*)\".*/\\1/"); then
         if [ -n "$LATEST_VERSION" ]; then
             LATEST_VERSION_CLEAN=$(echo "$LATEST_VERSION" | sed 's/^v//')
             CURRENT_VER_CLEAN=$(echo "$NEXUS_VERSION" | sed 's/^v//')
