@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 
 # Clear the screen for better visibility
 clear
@@ -35,6 +35,46 @@ save_nexus_id() {
     
     # Save ID to JSON file
     echo "{\"last_nexus_id\": \"$nexus_id\"}" > "$save_file" 2>/dev/null
+}
+
+# Function to migrate old configuration files
+migrate_old_config() {
+    local old_files=("$HOME/.nexus_id" "$HOME/.nexus_installer_id" "$HOME/.nexus_config")
+    local new_config="$HOME/.nexus_installer_config.json"
+    local migrated_id=""
+    
+    # Check if migration is needed
+    for old_file in "${old_files[@]}"; do
+        if [ -f "$old_file" ]; then
+            migrated_id=$(cat "$old_file" 2>/dev/null | head -1 | xargs)
+            if [ -n "$migrated_id" ]; then
+                break
+            fi
+        fi
+    done
+    
+    # Perform migration if needed
+    if [ -n "$migrated_id" ] && [ ! -f "$new_config" ]; then
+        echo ""
+        printf "\033[1;32m================================================\033[0m\n"
+        printf "\033[1;32mМИГРАЦИЯ КОНФИГУРАЦИИ\033[0m\n"
+        printf "\033[1;32m================================================\033[0m\n"
+        echo ""
+        echo "Найдены старые конфигурационные файлы"
+        echo "Переносим сохраненный Nexus ID в новый формат..."
+        
+        # Save to new format
+        save_nexus_id "$migrated_id"
+        
+        # Remove old files
+        for old_file in "${old_files[@]}"; do
+            [ -f "$old_file" ] && rm -f "$old_file"
+        done
+        
+        echo "✅ Миграция завершена успешно"
+        echo "✅ Nexus ID: $migrated_id"
+        echo ""
+    fi
 }
 
 # Function to remove existing nexus auto-restart cron jobs
@@ -119,40 +159,13 @@ update_nexus_cli_silent() {
         
         # Update only if needed
         if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
-            # Install expect if needed
-            if ! command -v expect >/dev/null 2>&1; then
-                if command -v apt >/dev/null 2>&1; then
-                    sudo apt update >/dev/null 2>&1 && sudo apt install -y expect >/dev/null 2>&1
-                elif command -v yum >/dev/null 2>&1; then
-                    sudo yum install -y expect >/dev/null 2>&1
+            # Update using non-interactive mode
+            if NONINTERACTIVE=1 curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
+                # Verify installation was successful
+                if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+                    echo "$CURRENT_TIME" > "$UPDATE_MARKER"
                 fi
             fi
-            
-            # Create expect script
-            local expect_script=$(mktemp)
-            cat > "$expect_script" << 'EXPECT_EOF'
-#!/usr/bin/expect -f
-set timeout 60
-log_user 0
-spawn sh -c "curl -sSL https://cli.nexus.xyz/ | sh"
-expect {
-    "*Terms of Use*" { send "Y\r"; exp_continue }
-    "*Do you agree*" { send "Y\r"; exp_continue }
-    "*Accept*" { send "Y\r"; exp_continue }
-    "*Continue*" { send "Y\r"; exp_continue }
-    "*yes/no*" { send "yes\r"; exp_continue }
-    "*y/n*" { send "y\r"; exp_continue }
-    eof { exit 0 }
-    timeout { exit 1 }
-}
-EXPECT_EOF
-            
-            # Execute update
-            chmod +x "$expect_script"
-            if "$expect_script" >/dev/null 2>&1; then
-                echo "$CURRENT_TIME" > "$UPDATE_MARKER"
-            fi
-            rm -f "$expect_script"
         else
             # Mark as checked even if no update needed
             echo "$CURRENT_TIME" > "$UPDATE_MARKER"
@@ -175,11 +188,17 @@ AUTO_RESTART_EOF
     echo "$script_path"
 }
 
-# Полностью автоматическая функция установки/обновления Nexus CLI
+# Функция установки/обновления Nexus CLI без expect
 # Возвращает: 0 = успех, 1 = ошибка, 2 = уже актуальная версия
 update_nexus_cli() {
     local force_reinstall="${1:-false}"
     local quiet_mode="${2:-false}"
+    
+    # Определение режима: первая установка или обновление
+    local is_first_install=true
+    if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+        is_first_install=false
+    fi
     
     # Функция для логирования (только если не тихий режим)
     log_message() {
@@ -190,19 +209,19 @@ update_nexus_cli() {
     local current_version=""
     local latest_version=""
     
-    if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+    if [ "$is_first_install" = "false" ]; then
         current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
     fi
     
     latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed 's/.*"tag_name": "v\?\(.*\)".*/\1/')
     
     # Проверка необходимости обновления
-    if [ "$force_reinstall" = "false" ] && [ -n "$current_version" ] && [ "$current_version" = "$latest_version" ]; then
+    if [ "$force_reinstall" = "false" ] && [ "$is_first_install" = "false" ] && [ -n "$current_version" ] && [ "$current_version" = "$latest_version" ]; then
         log_message "✅ Nexus CLI уже актуален (версия $current_version)"
         return 2
     fi
     
-    log_message "🔄 Обновление Nexus CLI..."
+    log_message "🔄 $([ "$is_first_install" = "true" ] && echo "Установка" || echo "Обновление") Nexus CLI..."
     [ -n "$current_version" ] && log_message "Текущая: $current_version"
     [ -n "$latest_version" ] && log_message "Последняя: $latest_version"
     
@@ -216,53 +235,26 @@ update_nexus_cli() {
         return 1
     fi
     
-    # Установка expect если нужно
-    if ! command -v expect >/dev/null 2>&1; then
-        log_message "Установка expect..."
-        if command -v apt >/dev/null 2>&1; then
-            sudo apt update >/dev/null 2>&1 && sudo apt install -y expect >/dev/null 2>&1
-        elif command -v yum >/dev/null 2>&1; then
-            sudo yum install -y expect >/dev/null 2>&1
+    # Выполнение установки/обновления
+    if [ "$is_first_install" = "true" ]; then
+        # Первая установка - интерактивная
+        if curl -sSL https://cli.nexus.xyz/ | sh; then
+            log_message "✅ Nexus CLI установлен успешно"
+            return 0
+        else
+            log_message "❌ Ошибка при установке Nexus CLI"
+            return 1
         fi
-    fi
-    
-    # Создание временного expect-скрипта для автоматизации
-    local expect_script=$(mktemp)
-    cat > "$expect_script" << 'EXPECT_EOF'
-#!/usr/bin/expect -f
-set timeout 60
-log_user 0
-spawn sh -c "curl -sSL https://cli.nexus.xyz/ | sh"
-expect {
-    "*Terms of Use*" { send "Y\r"; exp_continue }
-    "*Do you agree*" { send "Y\r"; exp_continue }
-    "*Accept*" { send "Y\r"; exp_continue }
-    "*Continue*" { send "Y\r"; exp_continue }
-    "*yes/no*" { send "yes\r"; exp_continue }
-    "*y/n*" { send "y\r"; exp_continue }
-    eof { exit 0 }
-    timeout { exit 1 }
-}
-EXPECT_EOF
-    
-    # Выполнение обновления
-    chmod +x "$expect_script"
-    if "$expect_script" >/dev/null 2>&1; then
-        rm -f "$expect_script"
-        
-        # Проверка успешности установки
-        if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+    else
+        # Обновление - неинтерактивное
+        if NONINTERACTIVE=1 curl -sSL https://cli.nexus.xyz/ | sh; then
             local new_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
             log_message "✅ Nexus CLI обновлен до версии $new_version"
             return 0
         else
-            log_message "❌ Ошибка: исполняемый файл не найден после установки"
+            log_message "❌ Ошибка при обновлении Nexus CLI"
             return 1
         fi
-    else
-        rm -f "$expect_script"
-        log_message "❌ Ошибка при обновлении Nexus CLI"
-        return 1
     fi
 }
 
@@ -365,6 +357,9 @@ show_swap_status() {
         echo "   (нет активных файлов подкачки)"
     fi
 }
+
+# Вызов миграции конфигурации в самом начале
+migrate_old_config
 
 # Check and stop existing tmux sessions first (before swap operations)
 echo ""
