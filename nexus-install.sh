@@ -196,8 +196,8 @@ update_nexus_cli_silent() {
         
         # Update only if needed
         if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
-            # Update using non-interactive mode
-            if NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
+            # Update using non-interactive mode, подаем пустой ввод чтобы не зависало
+            if echo | NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
                 # Verify installation was successful
                 if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                     save_update_check_time "$CURRENT_TIME"
@@ -283,8 +283,8 @@ update_nexus_cli() {
             return 1
         fi
     else
-        # Обновление или переустановка - неинтерактивное
-        if NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
+        # Обновление или переустановка - неинтерактивное, подаем пустой ввод чтобы не зависало
+        if echo | NONINTERACTIVE=1 DEBIAN_FRONTEND=noninteractive curl -sSL https://cli.nexus.xyz/ | sh >/dev/null 2>&1; then
             local new_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//')
             log_message "✅ Nexus CLI $([ "$force_reinstall" = "true" ] && echo "переустановлен" || echo "обновлен") до версии $new_version"
             return 0
