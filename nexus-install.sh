@@ -37,45 +37,7 @@ save_nexus_id() {
     echo "{\"last_nexus_id\": \"$nexus_id\"}" > "$save_file" 2>/dev/null
 }
 
-# Function to migrate old configuration files
-migrate_old_config() {
-    local old_files=("$HOME/.nexus_id" "$HOME/.nexus_installer_id" "$HOME/.nexus_config")
-    local new_config="$HOME/.nexus_installer_config.json"
-    local migrated_id=""
-    
-    # Check if migration is needed
-    for old_file in "${old_files[@]}"; do
-        if [ -f "$old_file" ]; then
-            migrated_id=$(cat "$old_file" 2>/dev/null | head -1 | xargs)
-            if [ -n "$migrated_id" ]; then
-                break
-            fi
-        fi
-    done
-    
-    # Perform migration if needed
-    if [ -n "$migrated_id" ] && [ ! -f "$new_config" ]; then
-        echo ""
-        printf "\033[1;32m================================================\033[0m\n"
-        printf "\033[1;32mМИГРАЦИЯ КОНФИГУРАЦИИ\033[0m\n"
-        printf "\033[1;32m================================================\033[0m\n"
-        echo ""
-        echo "Найдены старые конфигурационные файлы"
-        echo "Переносим сохраненный Nexus ID в новый формат..."
-        
-        # Save to new format
-        save_nexus_id "$migrated_id"
-        
-        # Remove old files
-        for old_file in "${old_files[@]}"; do
-            [ -f "$old_file" ] && rm -f "$old_file"
-        done
-        
-        echo "✅ Миграция завершена успешно"
-        echo "✅ Nexus ID: $migrated_id"
-        echo ""
-    fi
-}
+
 
 # Function to remove existing nexus auto-restart cron jobs
 remove_nexus_cron() {
@@ -358,8 +320,6 @@ show_swap_status() {
     fi
 }
 
-# Вызов миграции конфигурации в самом начале
-migrate_old_config
 
 # Check and stop existing tmux sessions first (before swap operations)
 echo ""
