@@ -441,6 +441,25 @@ else
     echo "✅ tmux уже установлен."
 fi
 
+# Check if cron is installed
+if ! command -v crontab &> /dev/null; then
+    echo "cron не установлен. Установка cron..."
+    if [ -x "$(command -v apt)" ]; then
+        if ! sudo apt install -y cron; then
+            error_exit "Не удалось установить cron через apt"
+        fi
+    elif [ -x "$(command -v yum)" ]; then
+        if ! sudo yum install -y cronie; then
+            error_exit "Не удалось установить cronie через yum"
+        fi
+    else
+        error_exit "Не удалось определить менеджер пакетов. Установите cron вручную."
+    fi
+    echo "✅ cron успешно установлен."
+else
+    echo "✅ cron уже установлен."
+fi
+
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
 printf "\033[1;32mПРОВЕРКА СУЩЕСТВУЮЩИХ СЕССИЙ\033[0m\n"
