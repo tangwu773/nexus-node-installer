@@ -324,7 +324,7 @@ show_memory_status() {
         total = $2; gsub(/Gi/, "Гб", total); gsub(/Mi/, "Мб", total); gsub(/Ki/, "Кб", total);
         used = $3; gsub(/Gi/, "Гб", used); gsub(/Mi/, "Мб", used); gsub(/Ki/, "Кб", used);
         free = $4; gsub(/Gi/, "Гб", free); gsub(/Mi/, "Мб", free); gsub(/Ki/, "Кб", free);
-        printf "│ ОЗУ (RAM)        │ %8s │ %8s │ %8s │\n", total, used, free
+        printf "│ Оперативка (RAM) │ %8s │ %8s │ %8s │\n", total, used, free
     }'
     
     # Проверяем, есть ли активный файл подкачки
