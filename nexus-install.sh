@@ -99,87 +99,35 @@ ensure_package_installed() {
 save_nexus_id() {
     local nexus_id="$1"
     local save_file="$HOME/.nexus_installer_config.json"
-    local current_time=$(date +%s)
     
     # Create directory if it doesn't exist
     mkdir -p "$(dirname "$save_file")" 2>/dev/null
     
-    # Preserve existing update time if available
-    local existing_update_time=0
-    if [ -f "$save_file" ]; then
-        existing_update_time=$(jq -r '.last_update_check // 0' "$save_file" 2>/dev/null || echo 0)
-    fi
-    
-    # Save to new JSON structure
-    echo "{\"nexus_id\": \"$nexus_id\", \"last_update_check\": $existing_update_time}" > "$save_file" 2>/dev/null
+    # Save simple JSON structure
+    echo "{\"nexus_id\": \"$nexus_id\"}" > "$save_file" 2>/dev/null
 }
 
-# Function to save update check time to JSON config
-save_update_check_time() {
-    local update_time="$1"
-    local save_file="$HOME/.nexus_installer_config.json"
-    
-    # Create directory if it doesn't exist
-    mkdir -p "$(dirname "$save_file")" 2>/dev/null
-    
-    # Get existing nexus_id
-    local existing_nexus_id=""
-    if [ -f "$save_file" ]; then
-        existing_nexus_id=$(jq -r '.nexus_id // empty' "$save_file" 2>/dev/null)
-    fi
-    
-    # Save to JSON with both parameters
-    if [ -n "$existing_nexus_id" ]; then
-        echo "{\"nexus_id\": \"$existing_nexus_id\", \"last_update_check\": $update_time}" > "$save_file" 2>/dev/null
-    else
-        echo "{\"nexus_id\": \"\", \"last_update_check\": $update_time}" > "$save_file" 2>/dev/null
-    fi
-}
-
-# Function to load update check time from JSON config
-load_update_check_time() {
-    local save_file="$HOME/.nexus_installer_config.json"
-    
-    if [ -f "$save_file" ]; then
-        # Extract update time from JSON
-        jq -r '.last_update_check // 0' "$save_file" 2>/dev/null || echo 0
-    else
-        echo 0
-    fi
-}
-
-# Function to remove existing nexus auto-restart cron jobs
+# Function to remove existing nexus auto-update cron jobs
 remove_nexus_cron() {
-    # Remove any existing nexus restart cron jobs
-    crontab -l 2>/dev/null | grep -v "nexus.*restart" | crontab - 2>/dev/null || true
+    # Remove any existing nexus auto-update cron jobs
+    crontab -l 2>/dev/null | grep -v "nexus.*auto.*update" | crontab - 2>/dev/null || true
 }
 
-# Function to add auto-restart cron job with auto-update
+# Function to add auto-update cron job (hourly)
 add_nexus_cron() {
-    local interval_minutes="$1"
-    local nexus_id="$2"
+    local nexus_id="$1"
     
     # Remove existing cron jobs first
     remove_nexus_cron
     
-    # Create auto-restart script with update functionality
-    local restart_script=$(create_auto_restart_script)
+    # Create auto-update script
+    local update_script=$(create_auto_update_script)
     
-    # Calculate cron expression for given interval
-    if [ "$interval_minutes" -lt 60 ]; then
-        # Less than hour - run every N minutes
-        cron_expr="*/$interval_minutes * * * *"
-    else
-        # Hour or more - convert to hours
-        local hours=$((interval_minutes / 60))
-        cron_expr="0 */$hours * * *"
-    fi
-    
-    # Create restart command using the script
-    local restart_cmd="$restart_script $nexus_id # nexus auto restart"
+    # Add hourly cron job (every hour at minute 0)
+    local update_cmd="0 * * * * $update_script $nexus_id # nexus auto update"
     
     # Add to crontab
-    (crontab -l 2>/dev/null; echo "$cron_expr $restart_cmd") | crontab -
+    (crontab -l 2>/dev/null; echo "$update_cmd") | crontab -
 }
 
 # Function to load saved Nexus ID
@@ -311,7 +259,7 @@ install_nexus_cli() {
 # Function to update Nexus CLI using non-interactive mode
 # Returns: 0 = success, 1 = error
 update_nexus_cli() {
-    process_message "🔄 Переустанавливаем Nexus CLI..."
+    process_message "🔄 Обновляем Nexus CLI..."
 
     # Download the install script first
     local installer_dir="$HOME/.nexus"
@@ -336,7 +284,7 @@ update_nexus_cli() {
                 return 1
             fi
         else
-            echo "❌ Ошибка при выполнении неинтерактивного обновления Nexus CLI."
+            echo "❌ Ошибка при выполнении обновления Nexus CLI."
             rm -f "$installer_file"
             return 1
         fi
@@ -346,104 +294,96 @@ update_nexus_cli() {
     fi
 }
 
-# Function to create auto-restart script with update functionality
-create_auto_restart_script() {
-    local script_path="$HOME/.nexus/auto_restart.sh"
+# Function to create auto-update script
+create_auto_update_script() {
+    local script_path="$HOME/.nexus/auto_update.sh"
     
     # Create .nexus directory if it doesn't exist
     mkdir -p "$HOME/.nexus" 2>/dev/null
     
-    # Create the auto-restart script
-    cat > "$script_path" << 'AUTO_RESTART_EOF'
+    # Create the auto-update script
+    cat > "$script_path" << 'AUTO_UPDATE_EOF'
 #!/bin/bash
 
-# Auto-restart script with auto-update functionality
+# Auto-update script for Nexus CLI
 # Arguments: $1 = nexus_id
 
 NEXUS_ID="$1"
 CONFIG_FILE="$HOME/.nexus_installer_config.json"
-CURRENT_TIME=$(date +%s)
 
-# Function to load update check time from JSON config
-load_update_check_time() {
-    if [ -f "$CONFIG_FILE" ]; then
-        jq -r '.last_update_check // 0' "$CONFIG_FILE" 2>/dev/null || echo 0
+# Function to get current Nexus CLI version
+get_current_version() {
+    if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+        $HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//' || echo "unknown"
     else
-        echo 0
+        echo "unknown"
     fi
 }
 
-# Function to save update check time to JSON config
-save_update_check_time() {
-    local update_time="$1"
-    
-    # Create directory if it doesn't exist
-    mkdir -p "$(dirname "$CONFIG_FILE")" 2>/dev/null
-    
-    # Get existing nexus_id
-    local existing_nexus_id=""
+# Function to get latest version from GitHub
+get_latest_version() {
+    curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | jq -r '.tag_name // empty' 2>/dev/null | sed 's/^v//' || echo "unknown"
+}
+
+# Function to load Nexus ID from config
+load_nexus_id() {
     if [ -f "$CONFIG_FILE" ]; then
-        existing_nexus_id=$(jq -r '.nexus_id // empty' "$CONFIG_FILE" 2>/dev/null)
-    fi
-    
-    # Save to JSON with both parameters
-    if [ -n "$existing_nexus_id" ]; then
-        echo "{\"nexus_id\": \"$existing_nexus_id\", \"last_update_check\": $update_time}" > "$CONFIG_FILE" 2>/dev/null
+        jq -r '.nexus_id // empty' "$CONFIG_FILE" 2>/dev/null || echo ""
     else
-        echo "{\"nexus_id\": \"$NEXUS_ID\", \"last_update_check\": $update_time}" > "$CONFIG_FILE" 2>/dev/null
+        echo ""
     fi
 }
 
-# Function for silent Nexus CLI update
-update_nexus_cli_silent() {
-    local last_update_time=$(load_update_check_time)
+# Main auto-update logic
+main() {
+    # Use provided Nexus ID or load from config
+    if [ -z "$NEXUS_ID" ]; then
+        NEXUS_ID=$(load_nexus_id)
+    fi
     
-    # Check if update is needed (max once per hour)
-    if [ $((CURRENT_TIME - last_update_time)) -gt 3600 ]; then
-        # Stop existing session for update
+    # Exit if no Nexus ID available
+    if [ -z "$NEXUS_ID" ]; then
+        exit 0
+    fi
+    
+    # Get current and latest versions
+    CURRENT_VERSION=$(get_current_version)
+    LATEST_VERSION=$(get_latest_version)
+    
+    # Check if update is needed
+    if [ "$CURRENT_VERSION" != "unknown" ] && [ "$LATEST_VERSION" != "unknown" ] && [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+        # Stop all Nexus processes
         tmux kill-session -t nexus 2>/dev/null || true
-        sleep 2
+        pkill -f "nexus-network" 2>/dev/null || true
+        sleep 3
         
-        # Check versions
-        local current_version=""
-        local latest_version=""
+        # Download and run installer in non-interactive mode
+        INSTALLER_DIR="$HOME/.nexus"
+        INSTALLER_FILE="$INSTALLER_DIR/install.sh"
         
-        if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
-            current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
-        fi
+        mkdir -p "$INSTALLER_DIR"
         
-        latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | jq -r '.tag_name // empty' | sed 's/^v//')
-        
-        # Update only if needed
-        if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
-            # Use the same update method as in main script
-            installer_dir="$HOME/.nexus"
-            installer_file="$installer_dir/install.sh"
-            mkdir -p "$installer_dir"
-            if curl -sSf https://cli.nexus.xyz/ -o "$installer_file"; then
-                chmod +x "$installer_file"
-                if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
-                    if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
-                        save_update_check_time "$CURRENT_TIME"
-                    fi
+        if curl -sSf https://cli.nexus.xyz/ -o "$INSTALLER_FILE" 2>/dev/null; then
+            chmod +x "$INSTALLER_FILE"
+            
+            # Run installer silently
+            if NONINTERACTIVE=1 "$INSTALLER_FILE" >/dev/null 2>&1; then
+                # Verify installation
+                if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+                    # Restart Nexus session
+                    sleep 2
+                    tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID" 2>/dev/null
                 fi
-                rm -f "$installer_file"
             fi
-        else
-            # Mark as checked even if no update needed
-            save_update_check_time "$CURRENT_TIME"
+            
+            rm -f "$INSTALLER_FILE"
         fi
     fi
 }
 
-# Perform auto-update check
-update_nexus_cli_silent
-
-# Restart the node
-tmux kill-session -t nexus 2>/dev/null || true
-sleep 5
-tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID"
-AUTO_RESTART_EOF
+# Run main function
+main
+AUTO_UPDATE_EOF
     
     # Make the script executable
     chmod +x "$script_path"
@@ -845,26 +785,30 @@ echo ""
 printf "🆔 Ваш Nexus ID: \033[1;36m$NEXUS_ID\033[0m\n"
 echo ""
 
-# Ask about auto-restart before final messages
+# Ask about auto-update before final messages
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
-printf "\033[1;32m🔄 АВТОМАТИЧЕСКАЯ ПЕРЕЗАГРУЗКА\033[0m\n"
+printf "\033[1;32m🔄 АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 echo ""
-echo "Как часто автоматически перезагружать ноду? (Enter = не перезагружать, число = минуты): "
-read AUTO_RESTART_MINUTES </dev/tty
 
-# Remove any existing auto-restart cron jobs first
+# Remove any existing auto-update cron jobs first
 remove_nexus_cron
 
-if [ -n "$AUTO_RESTART_MINUTES" ] && [ "$AUTO_RESTART_MINUTES" -gt 0 ] 2>/dev/null; then
-    add_nexus_cron "$AUTO_RESTART_MINUTES" "$NEXUS_ID"
-    echo ""
-    echo "✅ Нода будет автоматически перезагружаться каждые $AUTO_RESTART_MINUTES минут"
-    echo "✅ Автообновление Nexus CLI включено (проверка раз в час)"
-else
-    echo "✅ Автоматическая перезагрузка отключена"
-fi
+echo "Включить автообновление? (Enter = да, n = нет): "
+read AUTO_UPDATE_CHOICE </dev/tty
+
+case "${AUTO_UPDATE_CHOICE,,}" in
+    n|no|нет|н)
+        echo "✅ Автоматическое обновление отключено"
+        ;;
+    *)
+        add_nexus_cron "$NEXUS_ID"
+        echo ""
+        echo "✅ Автоматическое обновление включено (проверка каждый час)"
+        echo "✅ Nexus CLI будет автоматически обновляться при появлении новых версий"
+        ;;
+esac
 
 echo ""
 printf "\033[1;33m✅ Вы можете свободно закрывать терминал - нода продолжит работу\033[0m\n"
