@@ -428,14 +428,52 @@ printf "\033[1;32m================================================\033[0m\n"
 
 # Check if tmux session "nexus" already exists and kill it before swap operations
 if tmux has-session -t nexus 2>/dev/null; then
-    echo "⚠️  Обнаружена работающая сессия tmux 'nexus' (возможно, запущен Nexus)"
-    echo ""
-    printf "\033[1;32mЗавершаем сессию для безопасной работы с файлом подкачки...\033[0m\n"
+    process_message "⚠️ Обнаружена работающая сессия tmux c именем 'nexus'"
+    process_message "Завершаем сессию для безопасной работы с файлом подкачки..."
     tmux kill-session -t nexus 2>/dev/null || warning_message "Не удалось завершить существующую сессию"
-    echo "✅ Существующая сессия завершена."
+    success_message "✅ Существующая сессия завершена." "end"
     sleep 2  # Wait for processes to fully terminate
 else
-    echo "✅ Активных сессий 'nexus' не обнаружено."
+    success_message "✅ Активных сессий 'nexus' не обнаружено."
+fi
+
+# Check for any running Nexus processes outside tmux sessions
+process_message "Проверка запущенных процессов Nexus вне сессий..." "begin"
+NEXUS_PROCESSES=$(pgrep -f "nexus-network" 2>/dev/null || true)
+
+if [ -n "$NEXUS_PROCESSES" ]; then
+    process_message "⚠️  Обнаружены запущенные процессы Nexus вне tmux сессий:"
+    echo ""
+    # Show running processes for user information
+    ps aux | grep -E "nexus-network|nexus-cli" | grep -v grep | while read line; do
+        echo "   $line"
+    done
+    echo ""
+    process_message "Завершаем все процессы Nexus для безопасной работы..."
+    
+    # First try graceful termination
+    if pkill -TERM -f "nexus-network" 2>/dev/null; then
+        echo "   Отправлен сигнал завершения процессам Nexus..."
+        sleep 3
+    fi
+    
+    # Check if processes still running and force kill if needed
+    REMAINING_PROCESSES=$(pgrep -f "nexus-network" 2>/dev/null || true)
+    if [ -n "$REMAINING_PROCESSES" ]; then
+        echo "   Принудительное завершение оставшихся процессов..."
+        pkill -KILL -f "nexus-network" 2>/dev/null || true
+        sleep 2
+    fi
+    
+    # Final check
+    FINAL_CHECK=$(pgrep -f "nexus-network" 2>/dev/null || true)
+    if [ -z "$FINAL_CHECK" ]; then
+        success_message "✅ Все процессы Nexus успешно завершены." "end"
+    else
+        warning_message "Некоторые процессы Nexus могут все еще работать"
+    fi
+else
+    success_message "✅ Запущенных процессов Nexus вне сессий не обнаружено." "end"
 fi
 
 # Ask for swap file size in GB
