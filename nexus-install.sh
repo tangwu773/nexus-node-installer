@@ -506,53 +506,20 @@ else
 fi
 sleep 1
 
-# Check if swapfile exists before starting removal process
-SWAP_FILE_EXISTS=false
+# Remove existing swap file if it exists
 if [ -f /swapfile ]; then
-    SWAP_FILE_EXISTS=true
     process_message "Отключаем и удаляем текущий файл подкачки..."
-fi
-
-# First, try to disable all swap
-sudo swapoff -a 2>/dev/null
-
-# Wait for processes to release swap
-sleep 1
-
-# Force kill processes using swap if needed
-sudo fuser -k /swapfile 2>/dev/null || true
-sleep 1
-
-# Try multiple times to remove existing swapfile
-MAX_REMOVE_ATTEMPTS=5
-REMOVE_ATTEMPT=1
-
-while [ $REMOVE_ATTEMPT -le $MAX_REMOVE_ATTEMPTS ] && [ -f /swapfile ]; do
-    # Disable swap on this specific file
-    sudo swapoff /swapfile 2>/dev/null || true
-    sleep 1
     
-    # Force kill any processes still using the file
+    # Disable all swap and kill processes using it
+    sudo swapoff -a 2>/dev/null
     sudo fuser -k /swapfile 2>/dev/null || true
-    sleep 1
+    sleep 2
     
-    # Try to remove the file
-    if sudo rm -f /swapfile 2>/dev/null; then
-        break
-    else
-        sleep 1
+    # Remove the file
+    if ! sudo rm -f /swapfile 2>/dev/null; then
+        error_exit "Не удалось удалить существующий файл подкачки /swapfile. Возможно, файл используется системным процессом. Попробуйте перезагрузить сервер."
     fi
     
-    REMOVE_ATTEMPT=$((REMOVE_ATTEMPT + 1))
-done
-
-# Check if old swapfile still exists
-if [ -f /swapfile ]; then
-    error_exit "Не удалось удалить существующий файл подкачки /swapfile после $MAX_REMOVE_ATTEMPTS попыток. Возможно, файл используется системным процессом. Попробуйте перезагрузить сервер."
-fi
-
-# Show result of swap removal only if file existed
-if [ "$SWAP_FILE_EXISTS" = true ]; then
     success_message "✅ Файл подкачки успешно отключен и удален"
     sleep 1
 fi
@@ -562,6 +529,7 @@ if [ "$SWAP_SIZE" = "0" ]; then
     # Don't output anything for swap=0 case
     true
 else
+    # Create swap file with single attempt
     process_message "Создаем новый файл подкачки размером ${SWAP_SIZE}Гб..."
     sleep 1
 
@@ -573,45 +541,17 @@ else
         error_exit "❌ Недостаточно свободного места. Доступно: ${AVAILABLE_SPACE}ГБ, требуется: ${REQUIRED_SPACE}ГБ (${SWAP_SIZE}ГБ + 1ГБ буфер)"
     fi
 
-    # Try to create swap file, retry if failed
-    MAX_SWAP_ATTEMPTS=3
-    SWAP_ATTEMPT=1
-
-    while [ $SWAP_ATTEMPT -le $MAX_SWAP_ATTEMPTS ]; do
-        if [ $SWAP_ATTEMPT -gt 1 ]; then
-            # Clean up any partial files
-            sudo rm -f /swapfile 2>/dev/null || true
-        fi
-        
-        # Try to create the file
-        if sudo fallocate -l ${SWAP_SIZE}G /swapfile 2>/dev/null; then
-            if sudo chmod 600 /swapfile; then
-                if sudo mkswap /swapfile >/dev/null 2>&1; then
-                    if sudo swapon /swapfile >/dev/null 2>&1; then
-                        success_message "✅ Файл подкачки размером ${SWAP_SIZE}Гб создан"
-                        break
-                    else
-                        echo "❌ Ошибка при активации swap-файла (попытка $SWAP_ATTEMPT)"
-                    fi
-                else
-                    echo "❌ Ошибка при инициализации swap (попытка $SWAP_ATTEMPT)"
-                fi
-            else
-                echo "❌ Ошибка при установке прав доступа (попытка $SWAP_ATTEMPT)"
-            fi
-            # Clean up failed attempt
-            sudo rm -f /swapfile 2>/dev/null || true
-        else
-            echo "❌ Не удалось создать файл подкачки (попытка $SWAP_ATTEMPT)"
-        fi
-        
-        SWAP_ATTEMPT=$((SWAP_ATTEMPT + 1))
+    # Create and configure swap file
+    if sudo fallocate -l ${SWAP_SIZE}G /swapfile 2>/dev/null && \
+       sudo chmod 600 /swapfile && \
+       sudo mkswap /swapfile >/dev/null 2>&1 && \
+       sudo swapon /swapfile >/dev/null 2>&1; then
+        success_message "✅ Файл подкачки размером ${SWAP_SIZE}Гб создан"
         sleep 1
-    done
-
-    # Check if swap creation was successful
-    if [ $SWAP_ATTEMPT -gt $MAX_SWAP_ATTEMPTS ]; then
-        error_exit "Не удалось создать файл подкачки после $MAX_SWAP_ATTEMPTS попыток. Проверьте свободное место на диске и права доступа."
+    else
+        # Clean up failed attempt and exit with error
+        sudo rm -f /swapfile 2>/dev/null || true
+        error_exit "Не удалось создать файл подкачки. Проверьте свободное место на диске и права доступа."
     fi
 fi
 
