@@ -222,73 +222,24 @@ get_latest_nexus_version() {
     return 1
 }
 
-# Function to get latest Nexus CLI version from apt repositories
-# Returns: version string or "не найден" if package not available
-get_apt_nexus_version() {
-    if command -v apt &> /dev/null; then
-        # Update package list silently and check if nexus-cli package exists
-        if sudo apt update >/dev/null 2>&1; then
-            # Get available version from apt cache
-            local apt_version=$(apt-cache show nexus-cli 2>/dev/null | grep "^Version:" | head -n1 | awk '{print $2}' | sed 's/^v//' 2>/dev/null)
-            
-            if [ -n "$apt_version" ]; then
-                echo "$apt_version"
-                return 0
-            fi
-        fi
-    fi
-    
-    echo "не найден"
-    return 1
-}
-
-# Function to install Nexus CLI with multiple method selection (apt first, then official script)
+# Function to install Nexus CLI using official script
 # Returns: 0 = success, 1 = error
 install_nexus_cli() {
     process_message "🔄 Установка Nexus CLI..."
-    
-    # Method 1: Try apt package manager first (faster and more reliable)
-    if command -v apt &> /dev/null; then
-        process_message "🔍 Попытка установки через apt..."
-
-        # Update package list silently
-        if sudo apt update >/dev/null 2>&1; then
-            # Try to install nexus-cli package
-            if sudo apt install -y nexus-cli >/dev/null 2>&1; then
-                # Check if nexus-network command is available after apt installation
-                if command -v nexus-network &> /dev/null; then
-                    local apt_version=$(nexus-network --version 2>/dev/null | sed 's/nexus-network //' || echo "unknown")
-                    success_message "✅ Nexus CLI успешно установлен через apt (версия: $apt_version)"
-                    return 0
-                else
-                    warning_message "⚠️ apt установка завершилась, но команда nexus-network недоступна"
-                fi
-            else
-                echo "⚠️ Пакет nexus-cli не найден в репозиториях apt"
-            fi
-        else
-            echo "⚠️ Не удалось обновить список пакетов apt"
-        fi
-        
-        process_message "📦 Переходим к установке через официальный скрипт..."
-    fi
-    
-    # Method 2: Official script installation (fallback)
-    process_message "🌐 Установка через официальный скрипт Nexus..."
     
     # Run official installation script
     if curl -sSL https://cli.nexus.xyz/ | sh; then
         # Verify installation
         if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
             local script_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' || echo "unknown")
-            success_message "✅ Nexus CLI успешно установлен через официальный скрипт (версия: $script_version)"
+            success_message "✅ Nexus CLI успешно установлен (версия: $script_version)"
             return 0
         else
-            echo "❌ Официальный скрипт выполнился, но nexus-network не найден"
+            echo "❌ Установка завершена, но исполняемый файл nexus-network не найден"
             return 1
         fi
     else
-        echo "❌ Ошибка при выполнении официального скрипта установки"
+        echo "❌ Ошибка при загрузке официального скрипта установки Nexus CLI"
         return 1
     fi
 }
@@ -682,22 +633,12 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     
     # Get latest version
     LATEST_VERSION=$(get_latest_nexus_version)
-    APT_VERSION=$(get_apt_nexus_version)
     
-    if [ "$LATEST_VERSION" != "не удалось определить" ]; then
-        if [ "$NEXUS_VERSION" != "unknown" ] && [ "$NEXUS_VERSION" != "$LATEST_VERSION" ]; then
-            printf "Последняя версия (GitHub): \033[1;31m%s\033[0m\n" "$LATEST_VERSION"
-        else
-            echo "Последняя версия (GitHub): $LATEST_VERSION"
-        fi
+    # Show latest version with red color if update is available
+    if [ "$NEXUS_VERSION" != "unknown" ] && [ "$NEXUS_VERSION" != "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "не удалось определить" ]; then
+        printf "Последняя версия: \033[1;31m%s\033[0m\n" "$LATEST_VERSION"
     else
-        echo "Последняя версия (GitHub): не удалось определить"
-    fi
-    
-    if [ "$APT_VERSION" != "не найден" ]; then
-        echo "Последняя версия (APT): $APT_VERSION"
-    else
-        echo "Последняя версия (APT): пакет не найден в репозиториях"
+        echo "Последняя версия: $LATEST_VERSION"
     fi
     
     echo ""
@@ -720,14 +661,13 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
             ;;
     esac
 else
-    process_message "Установка Nexus CLI..."
     if install_nexus_cli; then
-        success_message "✅ Nexus CLI успешно установлен."
+        # Success message is already shown by the function
+        true
     else
-        error_exit "Не удалось установить Nexus CLI"
+        error_exit ""
     fi
 fi
-
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
 printf "\033[1;32mПРОВЕРКА СОВМЕСТИМОСТИ СИСТЕМЫ\033[0m\n"
