@@ -26,38 +26,36 @@ warning_message() {
 }
 
 # Function to display a process message
-# Parameters: $1 = message, $2 = begin ("begin" to add line before), $3 = end ("end" to add line after)
+# Parameters: $1 = message, $2 = "begin" | "end" | "beginend" (optional)
 process_message() {
     local message="$1"
-    local add_begin="$2"
-    local add_end="$3"
+    local spacing="$2"
     
-    # Add empty line before message if begin="begin"
-    [ "$add_begin" = "begin" ] && echo ""
+    # Add empty line before message if begin or beginend
+    [[ "$spacing" == "begin" || "$spacing" == "beginend" ]] && echo ""
     
     # Display the message
     printf "\033[1;33m%s\033[0m\n" "$message"
     
-    # Add empty line after message if end="end"
-    [ "$add_end" = "end" ] && echo ""
+    # Add empty line after message if end or beginend
+    [[ "$spacing" == "end" || "$spacing" == "beginend" ]] && echo ""
 }
 
 
 # Function to display a success message
-# Parameters: $1 = message, $2 = begin ("begin" to add line before), $3 = end ("end" to add line after)
+# Parameters: $1 = message, $2 = "begin" | "end" | "beginend" (optional)
 success_message() {
     local message="$1"
-    local add_begin="$2"
-    local add_end="$3"
+    local spacing="$2"
     
-    # Add empty line before message if begin="begin"
-    [ "$add_begin" = "begin" ] && echo ""
+    # Add empty line before message if begin or beginend
+    [[ "$spacing" == "begin" || "$spacing" == "beginend" ]] && echo ""
     
     # Display the message
     printf "\033[1;34m%s\033[0m\n" "$message"
     
-    # Add empty line after message if end="end"
-    [ "$add_end" = "end" ] && echo ""
+    # Add empty line after message if end or beginend
+    [[ "$spacing" == "end" || "$spacing" == "beginend" ]] && echo ""
 }
 
 
@@ -90,7 +88,7 @@ ensure_package_installed() {
         if [ "$skip_end" = "end" ]; then
             success_message "✅ $pkg успешно установлен." "begin"
         else
-            success_message "✅ $pkg успешно установлен." "begin" "end"
+            success_message "✅ $pkg успешно установлен." "beginend"
         fi
     else
         echo "✅ $pkg уже установлен."
