@@ -38,7 +38,7 @@ process_message() {
 ensure_package_installed() {
     local pkg="$1"
     if ! command -v "$pkg" &> /dev/null; then
-        echo "$pkg не установлен. Установка $pkg..."
+        process_message "$pkg не установлен. Установка $pkg..."
         if [ -x "$(command -v apt)" ]; then
             if ! sudo apt update; then
                 error_exit "Не удалось обновить список пакетов apt"
