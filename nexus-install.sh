@@ -444,29 +444,29 @@ else
 fi
 
 # Check for any running Nexus processes outside tmux sessions
-process_message "Проверка запущенных процессов Nexus вне сессий..." "begin"
+process_message "Поиск запущенных процессов Nexus вне сессий..."
 NEXUS_PROCESSES=$(pgrep -f "nexus-network" 2>/dev/null || true)
 
 if [ -n "$NEXUS_PROCESSES" ]; then
-    process_message "⚠️  Обнаружены запущенные процессы Nexus вне tmux сессий:"
+    success_message "⚠️ Обнаружены запущенные процессы Nexus вне tmux сессий:"
     echo ""
     # Show running processes for user information
     ps aux | grep -E "nexus-network|nexus-cli" | grep -v grep | while read line; do
         echo "   $line"
     done
     echo ""
-    process_message "Завершаем все процессы Nexus для безопасной работы..."
-    
+    process_message "Завершаем процессы Nexus для безопасной работы с файлом подкачки..."
+
     # First try graceful termination
     if pkill -TERM -f "nexus-network" 2>/dev/null; then
-        echo "   Отправлен сигнал завершения процессам Nexus..."
+        process_message "Мягкое завершение процессов Nexus..."
         sleep 3
     fi
     
     # Check if processes still running and force kill if needed
     REMAINING_PROCESSES=$(pgrep -f "nexus-network" 2>/dev/null || true)
     if [ -n "$REMAINING_PROCESSES" ]; then
-        echo "   Принудительное завершение оставшихся процессов..."
+        process_message "Принудительное завершение оставшихся процессов..."
         pkill -KILL -f "nexus-network" 2>/dev/null || true
         sleep 2
     fi
@@ -474,12 +474,12 @@ if [ -n "$NEXUS_PROCESSES" ]; then
     # Final check
     FINAL_CHECK=$(pgrep -f "nexus-network" 2>/dev/null || true)
     if [ -z "$FINAL_CHECK" ]; then
-        success_message "✅ Все процессы Nexus успешно завершены." "end"
+        success_message "✅ Все процессы Nexus успешно завершены."
     else
         warning_message "Некоторые процессы Nexus могут все еще работать"
     fi
 else
-    success_message "✅ Запущенных процессов Nexus вне сессий не обнаружено." "end"
+    success_message "✅ Запущенных процессов Nexus вне сессий не обнаружено."
 fi
 
 # Ask for swap file size in GB
