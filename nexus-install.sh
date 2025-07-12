@@ -26,25 +26,51 @@ warning_message() {
 }
 
 # Function to display a process message
+# Parameters: $1 = message, $2 = begin ("begin" to add line before), $3 = end ("end" to add line after)
 process_message() {
-    printf "\033[1;33m%s\033[0m\n" "$1"
-    echo ""
+    local message="$1"
+    local add_begin="$2"
+    local add_end="$3"
+    
+    # Add empty line before message if begin="begin"
+    [ "$add_begin" = "begin" ] && echo ""
+    
+    # Display the message
+    printf "\033[1;33m%s\033[0m\n" "$message"
+    
+    # Add empty line after message if end="end"
+    [ "$add_end" = "end" ] && echo ""
 }
 
+
 # Function to display a success message
+# Parameters: $1 = message, $2 = begin ("begin" to add line before), $3 = end ("end" to add line after)
 success_message() {
-    echo ""
-    printf "\033[1;34m%s\033[0m\n" "$1"
+    local message="$1"
+    local add_begin="$2"
+    local add_end="$3"
+    
+    # Add empty line before message if begin="begin"
+    [ "$add_begin" = "begin" ] && echo ""
+    
+    # Display the message
+    printf "\033[1;34m%s\033[0m\n" "$message"
+    
+    # Add empty line after message if end="end"
+    [ "$add_end" = "end" ] && echo ""
 }
 
 
 
 
 # Function to check and install a package if missing
+# Parameters: $1 = package name, $2 = "end" to skip empty line after success message (by default empty line is added)
 ensure_package_installed() {
     local pkg="$1"
+    local skip_end="$2"
+    
     if ! command -v "$pkg" &> /dev/null; then
-        process_message "$pkg не установлен. Установка $pkg..."
+        process_message "$pkg не установлен. Установка $pkg..." "end"
         if [ -x "$(command -v apt)" ]; then
             if ! sudo apt update; then
                 error_exit "Не удалось обновить список пакетов apt"
@@ -59,8 +85,13 @@ ensure_package_installed() {
         else
             error_exit "Не удалось определить менеджер пакетов. Установите $pkg вручную."
         fi
-        success_message "✅ $pkg успешно установлен."
-        echo ""
+        
+        # Add empty line after success message unless "end" is specified
+        if [ "$skip_end" = "end" ]; then
+            success_message "✅ $pkg успешно установлен." "begin"
+        else
+            success_message "✅ $pkg успешно установлен." "begin" "end"
+        fi
     else
         echo "✅ $pkg уже установлен."
     fi
