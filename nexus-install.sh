@@ -504,16 +504,12 @@ if [ "$SWAP_SIZE" = "0" ]; then
 else
     success_message "✅ Создать файл подкачки размером ${SWAP_SIZE}Гб"
 fi
-echo ""
-
-# Always remove existing swap files first
-echo ""
 
 # Check if swapfile exists before starting removal process
 SWAP_FILE_EXISTS=false
 if [ -f /swapfile ]; then
     SWAP_FILE_EXISTS=true
-    printf "\033[1;32mОтключаем и удаляем текущий файл подкачки...\033[0m\n"
+    process_message "Отключаем и удаляем текущий файл подкачки..."
 fi
 
 # First, try to disable all swap
@@ -564,7 +560,7 @@ if [ "$SWAP_SIZE" = "0" ]; then
     # Don't output anything for swap=0 case
     true
 else
-    printf "\033[1;32mСоздаем новый файл подкачки размером ${SWAP_SIZE}Гб...\033[0m\n"
+    process_message "Создаем новый файл подкачки размером ${SWAP_SIZE}Гб..."
 
     # Check available disk space
     AVAILABLE_SPACE=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
@@ -620,7 +616,6 @@ fi
 echo ""
 echo "Текущее состояние памяти:"
 show_memory_status
-echo ""
 
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
