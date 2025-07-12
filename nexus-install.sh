@@ -319,15 +319,15 @@ update_nexus_cli() {
     
     mkdir -p "$installer_dir"
     
-    if curl -sSf https://cli.nexus.xyz/ -o "$installer_file"; then
+    if curl -sSf https://cli.nexus.xyz/ -o "$installer_file" 2>/dev/null; then
         chmod +x "$installer_file"
         
-        # Run in non-interactive mode as per README
-        if NONINTERACTIVE=1 "$installer_file"; then
+        # Run in non-interactive mode as per README (suppress output)
+        if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
             # Verify installation
             if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 local update_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' || echo "unknown")
-                success_message "✅ Nexus CLI успешно обновлен (версия: $update_version)." "begin"
+                success_message "✅ Nexus CLI успешно обновлен (версия: $update_version)."
                 rm -f "$installer_file"
                 return 0
             else
@@ -668,7 +668,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     
     case "${REINSTALL_CHOICE,,}" in
         y|yes|да|д)
-            success_message "✅ Переустанавливаем Nexus CLI." "end"
+            success_message "✅ Переустанавливаем Nexus CLI." "beginend"
             if update_nexus_cli; then
                 true
             else
@@ -676,7 +676,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
             fi
             ;;
         *)
-            success_message "✅ Используем существующую установку Nexus CLI." "end"
+            success_message "✅ Используем существующую установку Nexus CLI." "begin"
             ;;
     esac
 else
