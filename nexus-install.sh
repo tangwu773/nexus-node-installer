@@ -427,14 +427,20 @@ printf "\033[1;32mОСТАНОВКА ЗАПУЩЕННЫХ ПРОЦЕССОВ NEX
 printf "\033[1;32m================================================\033[0m\n"
 
 # Check if tmux session "nexus" already exists and kill it before swap operations
+process_message "Поиск запущенных tmux сессий с именем 'nexus'..."
+
 if tmux has-session -t nexus 2>/dev/null; then
-    process_message "⚠️ Обнаружена работающая сессия tmux c именем 'nexus'"
+    success_message "⚠️ Обнаружена работающая сессия tmux c именем 'nexus'"
     process_message "Завершаем сессию для безопасной работы с файлом подкачки..."
-    tmux kill-session -t nexus 2>/dev/null || warning_message "Не удалось завершить существующую сессию"
-    success_message "✅ Существующая сессия завершена." "end"
+    
+    if tmux kill-session -t nexus 2>/dev/null; then
+        success_message "✅ Существующая tmux сессия успешно завершена." "end"
+    else
+        warning_message "Не удалось завершить существующую tmux сессию"
+    fi
     sleep 2  # Wait for processes to fully terminate
 else
-    success_message "✅ Активных сессий 'nexus' не обнаружено."
+    success_message "✅ Активных tmux сессий 'nexus' не обнаружено." "end"
 fi
 
 # Check for any running Nexus processes outside tmux sessions
