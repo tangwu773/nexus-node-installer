@@ -27,10 +27,16 @@ warning_message() {
 
 # Function to display a process message
 process_message() {
-    echo ""
     printf "\033[1;33m%s\033[0m\n" "$1"
     echo ""
 }
+
+# Function to display a success message
+success_message() {
+    echo ""
+    printf "\033[1;34m%s\033[0m\n" "$1"
+}
+
 
 
 
@@ -53,9 +59,7 @@ ensure_package_installed() {
         else
             error_exit "Не удалось определить менеджер пакетов. Установите $pkg вручную."
         fi
-        echo ""
-        echo "✅ $pkg успешно установлен."
-        echo ""
+        success_message "$pkg успешно установлен."
     else
         echo "✅ $pkg уже установлен."
     fi
