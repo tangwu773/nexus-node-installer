@@ -384,60 +384,11 @@ show_memory_status() {
     fi
 }
 
-# Function to display only RAM status in Russian table format
-show_ram_status() {
-    echo "┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐"
-    echo "│  Всего   │  Занято  │ Свободно │  Общее   │ Буфер/   │ Доступно │"
-    echo "│          │          │          │          │   Кеш    │          │"
-    echo "├──────────┼──────────┼──────────┼──────────┼──────────┼──────────┤"
-    
-    # Get memory info and format it with Russian units
-    free -h | awk '
-    /^Mem:/ {
-        # Convert units to Russian
-        total = $2; gsub(/Gi/, "Гб", total); gsub(/Mi/, "Мб", total); gsub(/Ki/, "Кб", total);
-        used = $3; gsub(/Gi/, "Гб", used); gsub(/Mi/, "Мб", used); gsub(/Ki/, "Кб", used);
-        free = $4; gsub(/Gi/, "Гб", free); gsub(/Mi/, "Мб", free); gsub(/Ki/, "Кб", free);
-        shared = $5; gsub(/Gi/, "Гб", shared); gsub(/Mi/, "Мб", shared); gsub(/Ki/, "Кб", shared);
-        cache = $6; gsub(/Gi/, "Гб", cache); gsub(/Mi/, "Мб", cache); gsub(/Ki/, "Кб", cache);
-        available = $7; gsub(/Gi/, "Гб", available); gsub(/Mi/, "Мб", available); gsub(/Ki/, "Кб", available);
-        
-        printf "│ %8s │ %8s │ %8s │ %8s │ %8s │ %8s │\n", total, used, free, shared, cache, available
-    }'
-    
-    echo "└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘"
-}
-
-# Function to display only swap status in Russian table format
-show_swap_table() {
-    # Check if swap is active
-    if swapon --show 2>/dev/null | grep -q .; then
-        echo "┌──────────┬──────────┬──────────┐"
-        echo "│  Всего   │  Занято  │ Свободно │"
-        echo "├──────────┼──────────┼──────────┤"
-        
-        # Get swap info and format it with Russian units
-        free -h | awk '
-        /^Swap:/ {
-            # Convert units to Russian
-            total = $2; gsub(/Gi/, "Гб", total); gsub(/Mi/, "Мб", total); gsub(/Ki/, "Кб", total);
-            used = $3; gsub(/Gi/, "Гб", used); gsub(/Mi/, "Мб", used); gsub(/Ki/, "Кб", used);
-            free = $4; gsub(/Gi/, "Гб", free); gsub(/Mi/, "Мб", free); gsub(/Ki/, "Кб", free);
-            
-            printf "│ %8s │ %8s │ %8s │\n", total, used, free
-        }'
-        
-        echo "└──────────┴──────────┴──────────┘"
-    else
-        echo "✅ Нет активных файлов подкачки"
-    fi
-}
-
 
 # Check and stop existing tmux sessions first (before swap operations)
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
-printf "\033[1;32mПРОВЕРКА СУЩЕСТВУЮЩИХ ПРОЦЕССОВ\033[0m\n"
+printf "\033[1;32mПРОВЕРКА УСТАНОВЛЛЕНОГО ПО\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 
 # Check if tmux, cron, jq is installed first
@@ -447,7 +398,7 @@ ensure_package_installed "jq"
 
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
-printf "\033[1;32mПРОВЕРКА СУЩЕСТВУЮЩИХ СЕССИЙ\033[0m\n"
+printf "\033[1;32mОСТАНОВКА ЗАПУЩЕННЫХ ПРОЦЕССОВ NEXUS CLI\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 
 # Check if tmux session "nexus" already exists and kill it before swap operations
