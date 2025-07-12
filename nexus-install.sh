@@ -222,6 +222,70 @@ get_latest_nexus_version() {
     return 1
 }
 
+# Function to build Nexus CLI from source code
+# Returns: 0 = success, 1 = error
+build_nexus_from_source() {
+    process_message "🔄 Собираем Nexus CLI из исходного кода..."
+
+    # Install build dependencies
+    ensure_package_installed "build-essential"
+    ensure_package_installed "libssl-dev"
+    ensure_package_installed "pkg-config"
+    ensure_package_installed "git"
+    ensure_package_installed "protobuf-compiler"
+
+    # Check if Rust is installed
+    if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
+        process_message "Устанавливаем Rust..."
+        if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable; then
+            echo "❌ Не удалось установить Rust."
+            return 1
+        fi
+        source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
+    fi
+
+    # Clone and build
+    local build_dir="$HOME/.nexus_build"
+    rm -rf "$build_dir" 2>/dev/null || true
+    mkdir -p "$build_dir"
+
+    process_message "Клонируем репозиторий..."
+    if ! git clone https://github.com/nexus-xyz/nexus-cli.git "$build_dir"; then
+        echo "❌ Не удалось клонировать репозиторий."
+        rm -rf "$build_dir" 2>/dev/null || true
+        return 1
+    fi
+
+    cd "$build_dir" || return 1
+    source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
+
+    process_message "Собираем проект (это может занять несколько минут)..."
+    if cargo build --release; then
+        mkdir -p "$HOME/.nexus/bin"
+        if [ -f "target/release/nexus-network" ]; then
+            cp "target/release/nexus-network" "$HOME/.nexus/bin/"
+            chmod +x "$HOME/.nexus/bin/nexus-network"
+            
+            local build_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' || echo "unknown")
+            success_message "✅ Nexus CLI успешно собран из исходного кода (версия: $build_version)."
+            
+            cd "$HOME"
+            rm -rf "$build_dir" 2>/dev/null || true
+            return 0
+        else
+            echo "❌ Исполняемый файл не найден после сборки."
+            cd "$HOME"
+            rm -rf "$build_dir" 2>/dev/null || true
+            return 1
+        fi
+    else
+        echo "❌ Ошибка при сборке."
+        cd "$HOME"
+        rm -rf "$build_dir" 2>/dev/null || true
+        return 1
+    fi
+}
+
 # Function to install Nexus CLI using official script
 # Returns: 0 = success, 1 = error
 install_nexus_cli() {
@@ -347,87 +411,6 @@ AUTO_RESTART_EOF
     chmod +x "$script_path"
     
     echo "$script_path"
-}
-
-# Функция установки/обновления Nexus CLI
-# Возвращает: 0 = успех, 1 = ошибка, 2 = уже актуальная версия
-update_nexus_cli() {
-    local force_reinstall="${1:-false}"
-    local quiet_mode="${2:-false}"
-    
-    # Определение режима: первая установка или обновление
-    local is_first_install=true
-    if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
-        is_first_install=false
-    fi
-    
-    # Функция для логирования (только если не тихий режим)
-    log_message() {
-        [ "$quiet_mode" = "false" ] && echo "$1"
-    }
-    
-    # Проверка текущей и последней версии
-    local current_version=""
-    local latest_version=""
-    
-    if [ "$is_first_install" = "false" ]; then
-        current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
-    fi
-    
-    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | jq -r '.tag_name // empty' | sed 's/^v//')
-    
-    # Проверка необходимости обновления
-    if [ "$force_reinstall" = "false" ] && [ "$is_first_install" = "false" ] && [ -n "$current_version" ] && [ "$current_version" = "$latest_version" ]; then
-        log_message "✅ Nexus CLI уже актуален (версия $current_version)"
-        return 2
-    fi
-    
-    log_message "🔄 $([ "$is_first_install" = "true" ] && echo "Установка" || ([ "$force_reinstall" = "true" ] && echo "Переустановка" || echo "Обновление")) Nexus CLI..."
-    [ -n "$current_version" ] && log_message "Текущая: $current_version"
-    [ -n "$latest_version" ] && log_message "Последняя: $latest_version"
-    
-    # Остановка существующих процессов
-    tmux kill-session -t nexus 2>/dev/null || true
-    sleep 2
-    
-    # Проверка curl
-    if ! command -v curl &> /dev/null; then
-        log_message "❌ curl не найден. Установите curl для продолжения."
-        return 1
-    fi
-    
-    # Выполнение установки/обновления
-    if [ "$is_first_install" = "true" ]; then
-        # Первая установка - интерактивная
-        if curl -sSL https://cli.nexus.xyz/ | sh; then
-            log_message "✅ Nexus CLI установлен успешно"
-            return 0
-        else
-            log_message "❌ Ошибка при установке Nexus CLI"
-            return 1
-        fi
-    else
-        # Обновление или переустановка - неинтерактивное через install.sh (официально)
-        local installer_dir="$HOME/.nexus"
-        local installer_file="$installer_dir/install.sh"
-        mkdir -p "$installer_dir"
-        if curl -sSf https://cli.nexus.xyz/ -o "$installer_file"; then
-            chmod +x "$installer_file"
-            if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
-                local new_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
-                log_message "✅ Nexus CLI $([ "$force_reinstall" = "true" ] && echo "переустановлен" || echo "обновлен") до версии $new_version"
-                rm -f "$installer_file"
-                return 0
-            else
-                log_message "❌ Ошибка при $([ "$force_reinstall" = "true" ] && echo "переустановке" || echo "обновлении") Nexus CLI"
-                rm -f "$installer_file"
-                return 1
-            fi
-        else
-            log_message "❌ Не удалось скачать официальный install.sh для Nexus CLI"
-            return 1
-        fi
-    fi
 }
 
 # Function to display memory status in Russian table format
@@ -649,7 +632,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         y|yes|да|д)
             echo ""
             echo "✅ Переустанавливаем Nexus CLI..."
-            if update_nexus_cli true false; then
+            if install_nexus_cli; then
                 echo "✅ Nexus CLI успешно переустановлен."
             else
                 error_exit "Не удалось переустановить Nexus CLI"
