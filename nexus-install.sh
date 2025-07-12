@@ -583,8 +583,8 @@ else
         # Try to create the file
         if sudo fallocate -l ${SWAP_SIZE}G /swapfile 2>/dev/null; then
             if sudo chmod 600 /swapfile; then
-                if sudo mkswap /swapfile 2>/dev/null; then
-                    if sudo swapon /swapfile 2>/dev/null; then
+                if sudo mkswap /swapfile >/dev/null 2>&1; then
+                    if sudo swapon /swapfile >/dev/null 2>&1; then
                         success_message "✅ Файл подкачки размером ${SWAP_SIZE}Гб создан"
                         break
                     else
