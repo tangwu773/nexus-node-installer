@@ -107,7 +107,7 @@ save_nexus_id() {
     # Preserve existing update time if available
     local existing_update_time=0
     if [ -f "$save_file" ]; then
-        existing_update_time=$(grep -o '"last_update_check": [0-9]*' "$save_file" 2>/dev/null | cut -d':' -f2 | tr -d ' ' || echo 0)
+        existing_update_time=$(jq -r '.last_update_check // 0' "$save_file" 2>/dev/null || echo 0)
     fi
     
     # Save to new JSON structure
@@ -125,8 +125,7 @@ save_update_check_time() {
     # Get existing nexus_id
     local existing_nexus_id=""
     if [ -f "$save_file" ]; then
-        existing_nexus_id=$(grep -o '"nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4 || \
-                           grep -o '"last_nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4)
+        existing_nexus_id=$(jq -r '.nexus_id // empty' "$save_file" 2>/dev/null)
     fi
     
     # Save to JSON with both parameters
@@ -143,7 +142,7 @@ load_update_check_time() {
     
     if [ -f "$save_file" ]; then
         # Extract update time from JSON
-        grep -o '"last_update_check": [0-9]*' "$save_file" 2>/dev/null | cut -d':' -f2 | tr -d ' ' || echo 0
+        jq -r '.last_update_check // 0' "$save_file" 2>/dev/null || echo 0
     else
         echo 0
     fi
@@ -189,9 +188,7 @@ load_saved_nexus_id() {
     
     if [ -f "$save_file" ]; then
         # Extract ID from new JSON structure
-        grep -o '"nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4 || \
-        # Fallback to old structure for backward compatibility
-        grep -o '"last_nexus_id": "[^"]*"' "$save_file" 2>/dev/null | cut -d'"' -f4
+        jq -r '.nexus_id // empty' "$save_file" 2>/dev/null
     fi
 }
 
@@ -216,7 +213,7 @@ CURRENT_TIME=$(date +%s)
 # Function to load update check time from JSON config
 load_update_check_time() {
     if [ -f "$CONFIG_FILE" ]; then
-        grep -o '"last_update_check": [0-9]*' "$CONFIG_FILE" 2>/dev/null | cut -d':' -f2 | tr -d ' ' || echo 0
+        jq -r '.last_update_check // 0' "$CONFIG_FILE" 2>/dev/null || echo 0
     else
         echo 0
     fi
@@ -232,8 +229,7 @@ save_update_check_time() {
     # Get existing nexus_id
     local existing_nexus_id=""
     if [ -f "$CONFIG_FILE" ]; then
-        existing_nexus_id=$(grep -o '"nexus_id": "[^"]*"' "$CONFIG_FILE" 2>/dev/null | cut -d'"' -f4 || \
-                           grep -o '"last_nexus_id": "[^"]*"' "$CONFIG_FILE" 2>/dev/null | cut -d'"' -f4)
+        existing_nexus_id=$(jq -r '.nexus_id // empty' "$CONFIG_FILE" 2>/dev/null)
     fi
     
     # Save to JSON with both parameters
@@ -262,7 +258,7 @@ update_nexus_cli_silent() {
             current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
         fi
         
-        latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed -E "s/.*\"tag_name\": \"v?([^\"]*)\".*/\\1/")
+        latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | jq -r '.tag_name // empty' | sed 's/^v//')
         
         # Update only if needed
         if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
@@ -326,7 +322,7 @@ update_nexus_cli() {
         current_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed "s/nexus-network //" | sed "s/^v//")
     fi
     
-    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed -E "s/.*\"tag_name\": \"v?([^\"]*)\".*/\\1/")
+    latest_version=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | jq -r '.tag_name // empty' | sed 's/^v//')
     
     # Проверка необходимости обновления
     if [ "$force_reinstall" = "false" ] && [ "$is_first_install" = "false" ] && [ -n "$current_version" ] && [ "$current_version" = "$latest_version" ]; then
@@ -606,7 +602,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     fi
     
     # Get latest version
-    if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | grep '"tag_name":' | sed -E "s/.*\"tag_name\": \"v?([^\"]*)\".*/\\1/"); then
+    if LATEST_VERSION=$(curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | jq -r '.tag_name // empty' | sed 's/^v//'); then
         if [ -n "$LATEST_VERSION" ]; then
             LATEST_VERSION_CLEAN=$(echo "$LATEST_VERSION" | sed 's/^v//')
             CURRENT_VER_CLEAN=$(echo "$NEXUS_VERSION" | sed 's/^v//')
