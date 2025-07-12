@@ -225,21 +225,21 @@ get_latest_nexus_version() {
 # Function to install Nexus CLI using official script
 # Returns: 0 = success, 1 = error
 install_nexus_cli() {
-    process_message "🔄 Установка Nexus CLI..."
-    
+    process_message "🔄 Устанавливаем Nexus CLI через официальный скрипт..."
+
     # Run official installation script
     if curl -sSL https://cli.nexus.xyz/ | sh; then
         # Verify installation
         if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
             local script_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' || echo "unknown")
-            success_message "✅ Nexus CLI успешно установлен (версия: $script_version)"
+            success_message "✅ Nexus CLI успешно установлен (версия: $script_version)." "end"
             return 0
         else
-            echo "❌ Установка завершена, но исполняемый файл nexus-network не найден"
+            echo "❌ Установка завершена, но исполняемый файл nexus-network не найден."
             return 1
         fi
     else
-        echo "❌ Ошибка при загрузке официального скрипта установки Nexus CLI"
+        echo "❌ Ошибка при загрузке официального скрипта установки Nexus CLI."
         return 1
     fi
 }
@@ -665,7 +665,8 @@ else
         # Success message is already shown by the function
         true
     else
-        error_exit "Не удалось установить Nexus CLI"
+        error_exit "Не удалось установить Nexus CLI. Скрипт остановлен."
+        sleep 2
     fi
 fi
 echo ""
