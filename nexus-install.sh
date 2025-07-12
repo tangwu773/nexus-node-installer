@@ -25,6 +25,32 @@ warning_message() {
     echo "Продолжаем выполнение..."
 }
 
+
+# Function to check and install a package if missing
+ensure_package_installed() {
+    local pkg="$1"
+    if ! command -v "$pkg" &> /dev/null; then
+        echo "$pkg не установлен. Установка $pkg..."
+        if [ -x "$(command -v apt)" ]; then
+            if ! sudo apt update; then
+                error_exit "Не удалось обновить список пакетов apt"
+            fi
+            if ! sudo apt install -y "$pkg"; then
+                error_exit "Не удалось установить $pkg через apt"
+            fi
+        elif [ -x "$(command -v yum)" ]; then
+            if ! sudo yum install -y "$pkg"; then
+                error_exit "Не удалось установить $pkg через yum"
+            fi
+        else
+            error_exit "Не удалось определить менеджер пакетов. Установите $pkg вручную."
+        fi
+        echo "✅ $pkg успешно установлен."
+    else
+        echo "✅ $pkg уже установлен."
+    fi
+}
+
 # Function to save Nexus ID to file
 save_nexus_id() {
     local nexus_id="$1"
@@ -399,46 +425,10 @@ printf "\033[1;32m================================================\033[0m\n"
 printf "\033[1;32mПРОВЕРКА СУЩЕСТВУЮЩИХ ПРОЦЕССОВ\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 
-# Check if tmux is installed first
-if ! command -v tmux &> /dev/null; then
-    echo "tmux не установлен. Установка tmux..."
-    if [ -x "$(command -v apt)" ]; then
-        if ! sudo apt update; then
-            error_exit "Не удалось обновить список пакетов apt"
-        fi
-        if ! sudo apt install -y tmux; then
-            error_exit "Не удалось установить tmux через apt"
-        fi
-    elif [ -x "$(command -v yum)" ]; then
-        if ! sudo yum install -y tmux; then
-            error_exit "Не удалось установить tmux через yum"
-        fi
-    else
-        error_exit "Не удалось определить менеджер пакетов. Установите tmux вручную."
-    fi
-    echo "✅ tmux успешно установлен."
-else
-    echo "✅ tmux уже установлен."
-fi
-
-# Check if cron is installed
-if ! command -v crontab &> /dev/null; then
-    echo "cron не установлен. Установка cron..."
-    if [ -x "$(command -v apt)" ]; then
-        if ! sudo apt install -y cron; then
-            error_exit "Не удалось установить cron через apt"
-        fi
-    elif [ -x "$(command -v yum)" ]; then
-        if ! sudo yum install -y cron; then
-            error_exit "Не удалось установить cron через yum"
-        fi
-    else
-        error_exit "Не удалось определить менеджер пакетов. Установите cron вручную."
-    fi
-    echo "✅ cron успешно установлен."
-else
-    echo "✅ cron уже установлен."
-fi
+# Check if tmux, cron, jq is installed first
+ensure_package_installed "tmux"
+ensure_package_installed "cron"
+ensure_package_installed "jq"
 
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
