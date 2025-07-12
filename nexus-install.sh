@@ -504,6 +504,7 @@ if [ "$SWAP_SIZE" = "0" ]; then
 else
     success_message "✅ Создать файл подкачки размером ${SWAP_SIZE}Гб"
 fi
+sleep 1
 
 # Check if swapfile exists before starting removal process
 SWAP_FILE_EXISTS=false
@@ -516,7 +517,7 @@ fi
 sudo swapoff -a 2>/dev/null
 
 # Wait for processes to release swap
-sleep 3
+sleep 1
 
 # Force kill processes using swap if needed
 sudo fuser -k /swapfile 2>/dev/null || true
@@ -539,7 +540,7 @@ while [ $REMOVE_ATTEMPT -le $MAX_REMOVE_ATTEMPTS ] && [ -f /swapfile ]; do
     if sudo rm -f /swapfile 2>/dev/null; then
         break
     else
-        sleep 2
+        sleep 1
     fi
     
     REMOVE_ATTEMPT=$((REMOVE_ATTEMPT + 1))
@@ -553,6 +554,7 @@ fi
 # Show result of swap removal only if file existed
 if [ "$SWAP_FILE_EXISTS" = true ]; then
     success_message "✅ Файл подкачки успешно отключен и удален"
+    sleep 1
 fi
 
 # Check if user wants to skip swap creation
@@ -561,6 +563,7 @@ if [ "$SWAP_SIZE" = "0" ]; then
     true
 else
     process_message "Создаем новый файл подкачки размером ${SWAP_SIZE}Гб..."
+    sleep 1
 
     # Check available disk space
     AVAILABLE_SPACE=$(df / | awk 'NR==2 {print int($4/1024/1024)}')
