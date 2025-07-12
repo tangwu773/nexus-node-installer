@@ -28,7 +28,7 @@ warning_message() {
 # Function to display a process message
 process_message() {
     echo ""
-    printf "\033[1;33m %s\033[0m\n" "$1"
+    printf "\033[1;33m%s\033[0m\n" "$1"
     echo ""
 }
 
