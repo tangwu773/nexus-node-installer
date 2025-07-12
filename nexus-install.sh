@@ -500,9 +500,9 @@ SWAP_SIZE=${SWAP_SIZE:-12}
 
 echo ""
 if [ "$SWAP_SIZE" = "0" ]; then
-    echo "✅ Файл подкачки не нужен"
+    success_message "✅ Файл подкачки не нужен"
 else
-    echo "✅ Создать файл подкачки размером ${SWAP_SIZE}Гб"
+    success_message "✅ Создать файл подкачки размером ${SWAP_SIZE}Гб"
 fi
 echo ""
 
@@ -556,9 +556,7 @@ fi
 
 # Show result of swap removal only if file existed
 if [ "$SWAP_FILE_EXISTS" = true ]; then
-    echo ""
-    echo "✅ Файл подкачки успешно отключен и удален"
-    echo ""
+    success_message "✅ Файл подкачки успешно отключен и удален"
 fi
 
 # Check if user wants to skip swap creation
@@ -591,8 +589,7 @@ else
             if sudo chmod 600 /swapfile; then
                 if sudo mkswap /swapfile 2>/dev/null; then
                     if sudo swapon /swapfile 2>/dev/null; then
-                        echo ""
-                        echo "✅ Файл подкачки размером ${SWAP_SIZE}Гб создан"
+                        success_message "✅ Файл подкачки размером ${SWAP_SIZE}Гб создан"
                         break
                     else
                         echo "❌ Ошибка при активации swap-файла (попытка $SWAP_ATTEMPT)"
