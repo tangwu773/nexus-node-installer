@@ -296,7 +296,7 @@ install_nexus_cli() {
         # Verify installation
         if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
             local script_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' || echo "unknown")
-            success_message "✅ Nexus CLI успешно установлен (версия: $script_version)." "end"
+            success_message "✅ Nexus CLI успешно установлен (версия: $script_version)." "begin"
             return 0
         else
             echo "❌ Установка завершена, но исполняемый файл nexus-network не найден."
