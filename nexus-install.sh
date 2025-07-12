@@ -59,7 +59,8 @@ ensure_package_installed() {
         else
             error_exit "Не удалось определить менеджер пакетов. Установите $pkg вручную."
         fi
-        success_message "$pkg успешно установлен."
+        success_message "✅ $pkg успешно установлен."
+        echo ""
     else
         echo "✅ $pkg уже установлен."
     fi
