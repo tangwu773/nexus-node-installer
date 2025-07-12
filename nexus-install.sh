@@ -391,6 +391,7 @@ AUTO_UPDATE_EOF
     echo "$script_path"
 }
 
+
 # Function to display memory status in Russian table format
 show_memory_status() {
     echo "┌──────────────────┬──────────┬──────────┬──────────┐"
@@ -800,12 +801,12 @@ read AUTO_UPDATE_CHOICE </dev/tty
 
 case "${AUTO_UPDATE_CHOICE,,}" in
     n|no|нет|н)
-        echo "✅ Автоматическое обновление отключено"
+        success_message "✅ Автоматическое обновление отключено" "beginend"
         ;;
     *)
         add_nexus_cron "$NEXUS_ID"
         echo ""
-        echo "✅ Автоматическое обновление включено (проверка каждый час)"
+        success_message "✅ Автоматическое обновление включено (проверка каждый час)" "beginend"
         echo "✅ Nexus CLI будет автоматически обновляться при появлении новых версий"
         ;;
 esac
