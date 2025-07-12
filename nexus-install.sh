@@ -308,6 +308,44 @@ install_nexus_cli() {
     fi
 }
 
+# Function to update Nexus CLI using non-interactive mode
+# Returns: 0 = success, 1 = error
+update_nexus_cli() {
+    process_message "🔄 Переустанавливаем Nexus CLI..."
+
+    # Download the install script first
+    local installer_dir="$HOME/.nexus"
+    local installer_file="$installer_dir/install.sh"
+    
+    mkdir -p "$installer_dir"
+    
+    if curl -sSf https://cli.nexus.xyz/ -o "$installer_file"; then
+        chmod +x "$installer_file"
+        
+        # Run in non-interactive mode as per README
+        if NONINTERACTIVE=1 "$installer_file"; then
+            # Verify installation
+            if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+                local update_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' || echo "unknown")
+                success_message "✅ Nexus CLI успешно обновлен (версия: $update_version)." "begin"
+                rm -f "$installer_file"
+                return 0
+            else
+                echo "❌ Обновление завершено, но исполняемый файл nexus-network не найден."
+                rm -f "$installer_file"
+                return 1
+            fi
+        else
+            echo "❌ Ошибка при выполнении неинтерактивного обновления Nexus CLI."
+            rm -f "$installer_file"
+            return 1
+        fi
+    else
+        echo "❌ Ошибка при загрузке скрипта установки для обновления."
+        return 1
+    fi
+}
+
 # Function to create auto-restart script with update functionality
 create_auto_restart_script() {
     local script_path="$HOME/.nexus/auto_restart.sh"
@@ -378,7 +416,7 @@ update_nexus_cli_silent() {
         
         # Update only if needed
         if [ -n "$current_version" ] && [ -n "$latest_version" ] && [ "$current_version" != "$latest_version" ]; then
-            # Официальный способ: скачать install.sh и запустить с NONINTERACTIVE=1
+            # Use the same update method as in main script
             installer_dir="$HOME/.nexus"
             installer_file="$installer_dir/install.sh"
             mkdir -p "$installer_dir"
@@ -630,17 +668,15 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     
     case "${REINSTALL_CHOICE,,}" in
         y|yes|да|д)
-            echo ""
-            echo "✅ Переустанавливаем Nexus CLI..."
-            if install_nexus_cli; then
-                echo "✅ Nexus CLI успешно переустановлен."
+            success_message "✅ Переустанавливаем Nexus CLI." "end"
+            if update_nexus_cli; then
+                true
             else
-                error_exit "Не удалось переустановить Nexus CLI"
+                warning_message "Не удалось переустановить Nexus CLI."
             fi
             ;;
         *)
-            echo ""
-            echo "✅ Используем существующую установку Nexus CLI."
+            success_message "✅ Используем существующую установку Nexus CLI." "end"
             ;;
     esac
 else
