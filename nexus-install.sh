@@ -631,68 +631,12 @@ else
 fi
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
-printf "\033[1;32mПРОВЕРКА СОВМЕСТИМОСТИ СИСТЕМЫ\033[0m\n"
-printf "\033[1;32m================================================\033[0m\n"
-
-# Get OS information
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS_NAME="$NAME"
-    OS_VERSION="$VERSION_ID"
-    echo "✅ Обнаружена ОС: $OS_NAME $OS_VERSION"
-    echo ""
-else
-    warning_message "Не удалось определить версию операционной системы"
-    OS_NAME="Unknown"
-    OS_VERSION="0"
-fi
-
-# Check Ubuntu version compatibility
-if [[ "$OS_NAME" == *"Ubuntu"* ]]; then
-    # Extract major version number (e.g., "22.04" -> "22")
-    UBUNTU_MAJOR_VERSION=$(echo "$OS_VERSION" | cut -d'.' -f1)
-    
-    printf "\033[1;32mПроверка совместимости Ubuntu $UBUNTU_MAJOR_VERSION с Nexus CLI...\033[0m\n"
-    
-    if [ "$UBUNTU_MAJOR_VERSION" -lt 22 ]; then
-        echo ""
-        printf "\033[1;31m❌ КРИТИЧЕСКАЯ ОШИБКА СОВМЕСТИМОСТИ\033[0m\n"
-        printf "\033[1;31m================================================\033[0m\n"
-        echo ""
-        echo "🚫 Обнаружена несовместимая версия операционной системы"
-        echo ""
-        echo "📋 Информация о системе:"
-        echo "   ОС: $OS_NAME $OS_VERSION"
-        echo ""
-        printf "\033[1;33m⚠️  ТРЕБОВАНИЯ NEXUS:\033[0m\n"
-        echo "   Nexus CLI работает только на Ubuntu 22.04 и выше"
-        echo "   Ваша версия Ubuntu $OS_VERSION не поддерживается"
-        echo ""
-        printf "\033[1;36m💡 РЕШЕНИЕ ПРОБЛЕМЫ:\033[0m\n"
-        echo "   1. Обновите Ubuntu до версии 22.04 LTS или выше"
-        echo "   2. Используйте другой сервер с Ubuntu 22.04+"
-        echo ""
-        printf "\033[1;31mСкрипт остановлен из-за несовместимости версии ОС.\033[0m\n"
-        printf "\033[1;31mПожалуйста, обновите Ubuntu и запустите скрипт заново.\033[0m\n"
-        echo ""
-        exit 1
-    else
-        echo "✅ Ubuntu $OS_VERSION совместима с Nexus CLI"
-    fi
-else
-    warning_message "Обнаружена не-Ubuntu система: $OS_NAME. Nexus может работать некорректно на других ОС."
-    echo "Продолжаем установку на ваш страх и риск..."
-fi
-
-echo ""
-printf "\033[1;32m================================================\033[0m\n"
-printf "\033[1;32mПОЛУЧЕНИЕ NEXUS ID\033[0m\n"
+printf "\033[1;32mВВОД NEXUS ID\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 
 # Display instructions for obtaining Nexus ID
-echo ""
-echo "ВАЖНО: Получите ваш Nexus ID"
-echo ""
+process_message "ВАЖНО: Получите ваш Nexus ID" "beginend"
+
 echo "1. Откройте браузер и перейдите на: https://app.nexus.xyz/nodes"
 echo "2. Войдите в свой аккаунт (кнопка Sign In)" 
 echo "3. Нажмите кнопку 'Add CLI Node'"
@@ -702,18 +646,12 @@ echo ""
 # Load saved Nexus ID if exists
 SAVED_NEXUS_ID=$(load_saved_nexus_id)
 
-# Ask for Nexus ID and save it with retry logic
+# Ask for Nexus ID with silent validation
 NEXUS_ID=""
 ATTEMPT=1
-MAX_ATTEMPTS=3
+MAX_ATTEMPTS=10
 
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-    if [ $ATTEMPT -gt 1 ]; then
-        echo ""
-        echo "Попытка $ATTEMPT из $MAX_ATTEMPTS"
-        echo "Nexus ID не может быть пустым"
-    fi
-    
     # Show prompt with saved ID if available
     if [ -n "$SAVED_NEXUS_ID" ]; then
         echo "Nexus ID (Enter = $SAVED_NEXUS_ID): "
@@ -729,28 +667,31 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     # If user didn't enter anything and we have saved ID, use it
     if [ -z "$NEXUS_ID" ] && [ -n "$SAVED_NEXUS_ID" ]; then
         NEXUS_ID="$SAVED_NEXUS_ID"
-        echo "✅ Используем сохраненный Nexus ID: $NEXUS_ID"
-        echo
+        success_message "✅ Используем сохраненный Nexus ID" "end"
+        break
     fi
     
-    if [ -n "$NEXUS_ID" ]; then
-        echo "Получен Nexus ID: $NEXUS_ID"
-        
+    # Check if NEXUS_ID is a number (only digits)
+    if [ -n "$NEXUS_ID" ] && [[ "$NEXUS_ID" =~ ^[0-9]+$ ]]; then
+        success_message "✅ Получен Nexus ID: $NEXUS_ID"
+
         # Save the ID for future use (only if it's different from saved one)
         if [ "$NEXUS_ID" != "$SAVED_NEXUS_ID" ]; then
             save_nexus_id "$NEXUS_ID"
-            echo "✅ Nexus ID сохранен для следующих запусков"
+            success_message "✅ Nexus ID сохранен для следующих запусков"
         fi
         
         break
+    else
+        # Silent retry - just clear the invalid input
+        NEXUS_ID=""
     fi
     
     ATTEMPT=$((ATTEMPT + 1))
 done
 
 if [ -z "$NEXUS_ID" ]; then
-    echo ""
-    error_exit "Не удалось получить Nexus ID после $MAX_ATTEMPTS попыток. Запустите скрипт заново и обязательно введите Nexus ID."
+    error_exit "Nexus ID должен содержать только цифры. Запустите скрипт заново и введите корректный Nexus ID."
 fi
 
 echo ""
