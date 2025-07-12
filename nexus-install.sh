@@ -665,7 +665,7 @@ else
         # Success message is already shown by the function
         true
     else
-        error_exit ""
+        error_exit "Не удалось установить Nexus CLI"
     fi
 fi
 echo ""
