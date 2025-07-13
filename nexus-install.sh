@@ -176,28 +176,13 @@ build_nexus_from_source() {
 
     # Install build dependencies quietly
     process_message "Устанавливаем зависимости для сборки..."
-    for pkg in build-essential libssl-dev pkg-config git protobuf-compiler; do
-        if ! command -v "$pkg" &> /dev/null && [ "$pkg" != "build-essential" ] && [ "$pkg" != "libssl-dev" ] && [ "$pkg" != "pkg-config" ] && [ "$pkg" != "protobuf-compiler" ]; then
-            if [ -x "$(command -v apt)" ]; then
-                sudo apt update >/dev/null 2>&1
-                sudo apt install -y "$pkg" >/dev/null 2>&1
-            elif [ -x "$(command -v yum)" ]; then
-                sudo yum install -y "$pkg" >/dev/null 2>&1
-            fi
-        elif [ "$pkg" = "build-essential" ] || [ "$pkg" = "libssl-dev" ] || [ "$pkg" = "pkg-config" ] || [ "$pkg" = "protobuf-compiler" ]; then
-            if [ -x "$(command -v apt)" ]; then
-                sudo apt update >/dev/null 2>&1
-                sudo apt install -y "$pkg" >/dev/null 2>&1
-            elif [ -x "$(command -v yum)" ]; then
-                case "$pkg" in
-                    "build-essential") sudo yum groupinstall -y "Development Tools" >/dev/null 2>&1 ;;
-                    "libssl-dev") sudo yum install -y openssl-devel >/dev/null 2>&1 ;;
-                    "pkg-config") sudo yum install -y pkgconfig >/dev/null 2>&1 ;;
-                    "protobuf-compiler") sudo yum install -y protobuf-compiler >/dev/null 2>&1 ;;
-                esac
-            fi
-        fi
-    done
+    if command -v apt >/dev/null 2>&1; then
+        sudo apt update >/dev/null 2>&1
+        sudo apt install -y build-essential libssl-dev pkg-config git protobuf-compiler >/dev/null 2>&1
+    elif command -v yum >/dev/null 2>&1; then
+        sudo yum groupinstall -y "Development Tools" >/dev/null 2>&1
+        sudo yum install -y openssl-devel pkgconfig git protobuf-compiler >/dev/null 2>&1
+    fi
 
     # Check if Rust is installed
     if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
@@ -255,7 +240,7 @@ build_nexus_from_source() {
             chmod +x "$HOME/.nexus/bin/nexus-network"
             
             local build_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' || echo "unknown")
-            success_message "✅ Nexus CLI успешно собран из исходного кода (версия: $build_version)."
+            success_message "✅ Nexus CLI успешно собран из исходного кода (версия: $build_version)." "begin"
             
             cd "$HOME"
             rm -rf "$build_dir" 2>/dev/null || true
@@ -340,7 +325,6 @@ update_nexus_cli() {
 # Returns: 0 = success, 1 = error
 update_nexus_cli_with_fallback() {
     if build_nexus_from_source; then
-        success_message "✅ Nexus CLI успешно обновлен через сборку из исходников"
         return 0
     else
         warning_message "Сборка из исходного кода не удалась. Попробуем официальное обновление..."
@@ -808,7 +792,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     fi
 else
     if build_nexus_from_source; then
-        success_message "✅ Nexus CLI успешно установлен через сборку из исходников" "begin"
+        true
     else
         warning_message "Сборка из исходного кода не удалась. Попробуем официальный скрипт..."
         if install_nexus_cli; then
