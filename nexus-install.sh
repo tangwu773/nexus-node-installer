@@ -205,10 +205,22 @@ build_nexus_from_source() {
 
     cd "$build_dir" || return 1
     
-    # Check if Cargo.toml exists
-    if [ ! -f "Cargo.toml" ]; then
-        echo "❌ Файл Cargo.toml не найден в репозитории."
+    # Navigate to the CLI directory where Cargo.toml is located
+    if [ -d "clients/cli" ]; then
+        cd "clients/cli" || return 1
+    else
+        echo "❌ Директория clients/cli не найдена в репозитории."
         process_message "Структура директории:"
+        ls -la 2>/dev/null || true
+        cd "$HOME"
+        rm -rf "$build_dir" 2>/dev/null || true
+        return 1
+    fi
+    
+    # Check if Cargo.toml exists in the CLI directory
+    if [ ! -f "Cargo.toml" ]; then
+        echo "❌ Файл Cargo.toml не найден в clients/cli."
+        process_message "Структура директории clients/cli:"
         ls -la 2>/dev/null || true
         cd "$HOME"
         rm -rf "$build_dir" 2>/dev/null || true
@@ -231,7 +243,9 @@ build_nexus_from_source() {
             rm -rf "$build_dir" 2>/dev/null || true
             return 0
         else
-            echo "❌ Исполняемый файл не найден после сборки."
+            echo "❌ Исполняемый файл nexus-network не найден после сборки."
+            process_message "Содержимое target/release/:"
+            ls -la target/release/ 2>/dev/null || echo "Директория target/release/ не найдена"
             cd "$HOME"
             rm -rf "$build_dir" 2>/dev/null || true
             return 1
@@ -407,6 +421,16 @@ build_from_source() {
     
     if git clone https://github.com/nexus-xyz/nexus-cli.git "$build_dir" >/dev/null 2>&1; then
         cd "$build_dir"
+        
+        # Navigate to the CLI directory where Cargo.toml is located
+        if [ -d "clients/cli" ]; then
+            cd "clients/cli"
+        else
+            cd "$HOME"
+            rm -rf "$build_dir" 2>/dev/null
+            return 1
+        fi
+        
         source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
         
         # Check if Cargo.toml exists before building
