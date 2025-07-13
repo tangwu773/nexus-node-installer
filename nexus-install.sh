@@ -638,22 +638,45 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
     fi
     
     echo ""
-    echo "Переустановить Nexus CLI? (Enter = нет, y = да): "
-    read REINSTALL_CHOICE </dev/tty
     
-    case "${REINSTALL_CHOICE,,}" in
-        y|yes|да|д)
-            success_message "✅ Переустанавливаем Nexus CLI." "beginend"
-            if update_nexus_cli; then
-                true
-            else
-                warning_message "Не удалось переустановить Nexus CLI."
-            fi
-            ;;
-        *)
-            success_message "✅ Используем существующую установку Nexus CLI." "begin"
-            ;;
-    esac
+    # Determine default action based on version comparison
+    if [ "$NEXUS_VERSION" != "unknown" ] && [ "$NEXUS_VERSION" != "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "не удалось определить" ]; then
+        # New version available - default is to update
+        echo "Переустановить Nexus CLI? (Enter = да, n = нет): "
+        read REINSTALL_CHOICE </dev/tty
+        
+        case "${REINSTALL_CHOICE,,}" in
+            n|no|нет|н)
+                success_message "✅ Используем существующую установку Nexus CLI." "begin"
+                ;;
+            *)
+                success_message "✅ Переустанавливаем Nexus CLI." "beginend"
+                if update_nexus_cli; then
+                    true
+                else
+                    warning_message "Не удалось переустановить Nexus CLI."
+                fi
+                ;;
+        esac
+    else
+        # No new version or version unknown - default is not to update
+        echo "Переустановить Nexus CLI? (Enter = нет, y = да): "
+        read REINSTALL_CHOICE </dev/tty
+        
+        case "${REINSTALL_CHOICE,,}" in
+            y|yes|да|д)
+                success_message "✅ Переустанавливаем Nexus CLI." "beginend"
+                if update_nexus_cli; then
+                    true
+                else
+                    warning_message "Не удалось переустановить Nexus CLI."
+                fi
+                ;;
+            *)
+                success_message "✅ Используем существующую установку Nexus CLI." "begin"
+                ;;
+        esac
+    fi
 else
     if install_nexus_cli; then
         # Success message is already shown by the function
