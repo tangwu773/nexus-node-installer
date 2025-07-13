@@ -215,7 +215,7 @@ get_latest_nexus_version() {
 # Function to install Nexus CLI via direct binary download
 # Returns: 0 = success, 1 = error
 install_nexus_cli_binary() {
-    process_message "🔄 Загружаем Nexus CLI бинарный файл напрямую..."
+    process_message "🔄 Загружаем последнюю версию бинарного файла Nexus Cli напрямую с Github..."
     
     # Create necessary directories
     mkdir -p "$HOME/.nexus/bin" 2>/dev/null
@@ -228,7 +228,6 @@ install_nexus_cli_binary() {
     fi
     
     local download_url="https://github.com/nexus-xyz/nexus-cli/releases/download/v${latest_version}/nexus-network-linux-x86_64"
-    process_message "Загружаем последнюю версию v${latest_version}..."
     
     # Download the binary with error handling
     if wget -q --timeout=30 --tries=3 -O "$HOME/.nexus/bin/nexus-network" "$download_url" 2>/dev/null; then
