@@ -149,28 +149,6 @@ save_nexus_id() {
     echo "{\"nexus_id\": \"$nexus_id\"}" > "$save_file" 2>/dev/null
 }
 
-# Function to remove existing nexus auto-update cron jobs
-remove_nexus_cron() {
-    # Remove any existing nexus auto-update cron jobs
-    crontab -l 2>/dev/null | grep -v "nexus.*auto.*update" | crontab - 2>/dev/null || true
-}
-
-# Function to add auto-update cron job (hourly)
-add_nexus_cron() {
-    local nexus_id="$1"
-    
-    # Remove existing cron jobs first
-    remove_nexus_cron
-    
-    # Create auto-update script
-    local update_script=$(create_auto_update_script)
-    
-    # Add hourly cron job (every hour at minute 0)
-    local update_cmd="0 * * * * $update_script $nexus_id # nexus auto update"
-    
-    # Add to crontab
-    (crontab -l 2>/dev/null; echo "$update_cmd") | crontab -
-}
 
 # Function to load saved Nexus ID
 load_saved_nexus_id() {
@@ -215,7 +193,6 @@ get_latest_nexus_version() {
 # Function to install Nexus CLI via direct binary download
 # Returns: 0 = success, 1 = error
 install_nexus_cli_binary() {
-    process_message "🔄 Загружаем последнюю версию бинарного файла Nexus Cli напрямую с Github..."
     
     # Create necessary directories
     mkdir -p "$HOME/.nexus/bin" 2>/dev/null
@@ -252,8 +229,7 @@ install_nexus_cli_binary() {
 
 # Function to build Nexus CLI from source code
 # Returns: 0 = success, 1 = error
-build_nexus_from_source() {
-    process_message "🔄 Собираем Nexus CLI из исходного кода..."
+install_nexus_from_source() {
     
     # Install individual packages using the updated function
     ensure_package_installed "build-essential" || return 1
@@ -331,8 +307,7 @@ build_nexus_from_source() {
 
 # Function to install Nexus CLI using official script
 # Returns: 0 = success, 1 = error
-install_nexus_cli() {
-    process_message "🔄 Устанавливаем Nexus CLI через официальный скрипт..."
+install_nexus_cli_official() {
 
     # Run official installation script
     if curl -sSL https://cli.nexus.xyz/ | sh; then
@@ -351,36 +326,9 @@ install_nexus_cli() {
     fi
 }
 
-# Function to install Nexus CLI with three-tier fallback approach
+# Function to install Nexus CLI using non-interactive mode
 # Returns: 0 = success, 1 = error
-install_nexus_cli_with_fallback() {
-    # Tier 1: Direct binary download via wget (fastest and most reliable)
-    if install_nexus_cli_binary; then
-        return 0
-    else
-        warning_message "Прямая загрузка бинарника не удалась. Попробуем официальный скрипт..."
-        
-        # Tier 2: Official installation script
-        if install_nexus_cli; then
-            return 0
-        else
-            warning_message "Официальный скрипт установки не удался. Попробуем сборку из исходного кода..."
-            
-            # Tier 3: Build from source (most reliable but slowest)
-            if build_nexus_from_source; then
-                return 0
-            else
-                echo "❌ Не удалось установить Nexus CLI ни одним из способов."
-                return 1
-            fi
-        fi
-    fi
-}
-
-# Function to update Nexus CLI using non-interactive mode
-# Returns: 0 = success, 1 = error
-update_nexus_cli() {
-    process_message "🔄 Обновляем Nexus CLI..."
+install_nexus_cli_official_silent() {
 
     # Download the install script first
     local installer_dir="$HOME/.nexus"
@@ -415,30 +363,68 @@ update_nexus_cli() {
     fi
 }
 
-# Function to update Nexus CLI with three-tier fallback approach
+# Function to install Nexus CLI with three-tier fallback approach
+# Parameters: $1 = "update" (optional) - use silent mode if "update" is passed
 # Returns: 0 = success, 1 = error
-update_nexus_cli_with_fallback() {
+install_nexus_cli() {
+    local mode="$1"
+    
     # Tier 1: Direct binary download via wget (fastest and most reliable)
+    process_message "🔄 Загружаем последнюю версию бинарного файла Nexus CLI напрямую с Github..."
     if install_nexus_cli_binary; then
         return 0
     else
-        warning_message "Прямая загрузка бинарника не удалась. Попробуем официальное обновление..."
+        warning_message "Прямая загрузка бинарника не удалась. Попробуем официальный скрипт..."
         
-        # Tier 2: Official update script
-        if update_nexus_cli; then
-            return 0
-        else
-            warning_message "Официальное обновление не удалось. Попробуем сборку из исходного кода..."
-            
-            # Tier 3: Build from source
-            if build_nexus_from_source; then
+        # Tier 2: Official installation script (silent or interactive based on mode)
+        if [ "$mode" = "update" ]; then
+            process_message "🔄 Обновляем Nexus CLI через официальный скрипт..."
+            if install_nexus_cli_official_silent; then
                 return 0
-            else
-                echo "❌ Не удалось обновить Nexus CLI ни одним из способов."
-                return 1
+            fi
+        else
+            process_message "🔄 Устанавливаем Nexus CLI через официальный скрипт..."
+            if install_nexus_cli_official; then
+                return 0
             fi
         fi
+        
+        warning_message "Официальный скрипт установки не удался. Попробуем сборку из исходного кода..."
+        
+        # Tier 3: Build from source (most reliable but slowest)
+        process_message "🔄 Собираем Nexus CLI из исходного кода..."
+        if install_nexus_from_source; then
+            return 0
+        else
+            echo "❌ Не удалось установить Nexus CLI ни одним из способов."
+            return 1
+        fi
     fi
+}
+
+
+
+# Function to remove existing nexus auto-update cron jobs
+remove_nexus_cron() {
+    # Remove any existing nexus auto-update cron jobs
+    crontab -l 2>/dev/null | grep -v "nexus.*auto.*update" | crontab - 2>/dev/null || true
+}
+
+# Function to add auto-update cron job (hourly)
+add_nexus_cron() {
+    local nexus_id="$1"
+    
+    # Remove existing cron jobs first
+    remove_nexus_cron
+    
+    # Create auto-update script
+    local update_script=$(create_auto_update_script)
+    
+    # Add hourly cron job (every hour at minute 0)
+    local update_cmd="0 * * * * $update_script $nexus_id # nexus auto update"
+    
+    # Add to crontab
+    (crontab -l 2>/dev/null; echo "$update_cmd") | crontab -
 }
 
 # Function to create auto-update script
@@ -484,77 +470,6 @@ get_latest_nexus_version() {
         [ $attempt -le $max_attempts ] && sleep 2
     done
     echo "unknown"
-    return 1
-}
-
-# Function to get latest version from GitHub (silent version for auto-update)
-get_latest_nexus_version_silent() {
-    local max_attempts=3
-    local attempt=1
-    while [ $attempt -le $max_attempts ]; do
-        local api_response=$(curl -s --max-time 3 https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null)
-        if [ -n "$api_response" ] && echo "$api_response" | jq -e '.tag_name' >/dev/null 2>&1; then
-            local version=$(echo "$api_response" | jq -r '.tag_name' | sed 's/^v//')
-            if [ -n "$version" ] && [[ "$version" =~ ^[0-9]+(\.[0-9]+)*.*$ ]]; then
-                echo "$version"
-                return 0
-            fi
-        fi
-        attempt=$((attempt + 1))
-        [ $attempt -le $max_attempts ] && sleep 2
-    done
-    echo "unknown"
-    return 1
-}
-
-# Function to update via direct binary download (silent)
-update_nexus_cli_binary_silent() {
-    mkdir -p "$HOME/.nexus/bin" 2>/dev/null
-    
-    # Получаем последнюю версию с GitHub API (silent)
-    local latest_version=$(get_latest_nexus_version_silent)
-    if [ "$latest_version" = "unknown" ]; then
-        return 1
-    fi
-    
-    local download_url="https://github.com/nexus-xyz/nexus-cli/releases/download/v${latest_version}/nexus-network-linux-x86_64"
-    
-    if wget -q --timeout=30 --tries=3 -O "$HOME/.nexus/bin/nexus-network" "$download_url" 2>/dev/null; then
-        chmod +x "$HOME/.nexus/bin/nexus-network"
-        if [ -f "$HOME/.nexus/bin/nexus-network" ] && "$HOME/.nexus/bin/nexus-network" --version >/dev/null 2>&1; then
-            return 0
-        else
-            rm -f "$HOME/.nexus/bin/nexus-network" 2>/dev/null
-            return 1
-        fi
-    fi
-    return 1
-}
-
-# Function to load Nexus ID from config
-load_saved_nexus_id() {
-    if [ -f "$CONFIG_FILE" ]; then
-        jq -r '.nexus_id // empty' "$CONFIG_FILE" 2>/dev/null || echo ""
-    else
-        echo ""
-    fi
-}
-
-# Function to update via official script (silent)
-update_nexus_cli_silent() {
-    local installer_dir="$HOME/.nexus"
-    local installer_file="$installer_dir/install.sh"
-    mkdir -p "$installer_dir"
-    if curl -sSf https://cli.nexus.xyz/ -o "$installer_file" 2>/dev/null; then
-        chmod +x "$installer_file"
-        if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
-            if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
-                rm -f "$installer_file"
-                return 0
-            fi
-        fi
-        rm -f "$installer_file"
-    fi
     return 1
 }
 
@@ -618,10 +533,62 @@ ensure_package_installed_silent() {
     return 0
 }
 
-# Function to build from source (robust, silent)
-build_nexus_from_source_silent() {
+# Function to load Nexus ID from config
+load_saved_nexus_id() {
+    if [ -f "$CONFIG_FILE" ]; then
+        jq -r '.nexus_id // empty' "$CONFIG_FILE" 2>/dev/null || echo ""
+    else
+        echo ""
+    fi
+}
+
+# Function to update via direct binary download (silent)
+install_nexus_cli_binary_silent() {
+    mkdir -p "$HOME/.nexus/bin" 2>/dev/null
     
-    # Install build dependencies one by one, silent
+    # Получаем последнюю версию с GitHub API (silent)
+    local latest_version=$(get_latest_nexus_version)
+    if [ "$latest_version" = "unknown" ]; then
+        return 1
+    fi
+    
+    local download_url="https://github.com/nexus-xyz/nexus-cli/releases/download/v${latest_version}/nexus-network-linux-x86_64"
+    
+    if wget -q --timeout=30 --tries=3 -O "$HOME/.nexus/bin/nexus-network" "$download_url" 2>/dev/null; then
+        chmod +x "$HOME/.nexus/bin/nexus-network"
+        if [ -f "$HOME/.nexus/bin/nexus-network" ] && "$HOME/.nexus/bin/nexus-network" --version >/dev/null 2>&1; then
+            return 0
+        else
+            rm -f "$HOME/.nexus/bin/nexus-network" 2>/dev/null
+            return 1
+        fi
+    fi
+    return 1
+}
+
+
+# Function to update via official script (silent)
+install_nexus_cli_official_silent() {
+    local installer_dir="$HOME/.nexus"
+    local installer_file="$installer_dir/install.sh"
+    mkdir -p "$installer_dir"
+    if curl -sSf https://cli.nexus.xyz/ -o "$installer_file" 2>/dev/null; then
+        chmod +x "$installer_file"
+        if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
+            if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+                rm -f "$installer_file"
+                return 0
+            fi
+        fi
+        rm -f "$installer_file"
+    fi
+    return 1
+}
+
+
+# Function to build from source (robust, silent)
+install_nexus_cli_from_source_silent() {
+
     ensure_package_installed_silent "build-essential" || return 1
     ensure_package_installed_silent "libssl-dev" || return 1
     ensure_package_installed_silent "pkg-config" || return 1
@@ -680,8 +647,8 @@ main() {
     if [ -z "$NEXUS_ID" ]; then
         exit 0
     fi
-    CURRENT_VERSION=$(get_current_nexus_version_silent)
-    LATEST_VERSION=$(get_latest_nexus_version_silent)
+    CURRENT_VERSION=$(get_current_nexus_version)
+    LATEST_VERSION=$(get_latest_nexus_version)
     if [ "$CURRENT_VERSION" != "unknown" ] && [ "$LATEST_VERSION" != "unknown" ] && [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
 
         tmux kill-session -t nexus 2>/dev/null || true
@@ -695,7 +662,7 @@ main() {
         fi
 
         # Three-tier auto-update approach: wget binary → official script → source build
-        if update_nexus_cli_binary_silent || update_nexus_cli_silent || build_nexus_from_source_silent; then
+        if install_nexus_cli_binary_silent || install_nexus_cli_official_silent || install_nexus_cli_from_source_silent; then
             if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 sleep 2
                 tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID" 2>/dev/null
@@ -983,7 +950,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 ;;
             *)
                 success_message "✅ Переустанавливаем Nexus CLI." "beginend"
-                if update_nexus_cli_with_fallback; then
+                if install_nexus_cli "update"; then
                     true
                 else
                     warning_message "Не удалось переустановить Nexus CLI."
@@ -998,7 +965,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         case "${REINSTALL_CHOICE,,}" in
             y|yes|да|д)
                 success_message "✅ Переустанавливаем Nexus CLI." "beginend"
-                if update_nexus_cli_with_fallback; then
+                if install_nexus_cli "update"; then
                     true
                 else
                     warning_message "Не удалось переустановить Nexus CLI."
@@ -1010,7 +977,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         esac
     fi
 else
-    if install_nexus_cli_with_fallback; then
+    if install_nexus_cli; then
         # Success message is already shown by the function
         true
     else
