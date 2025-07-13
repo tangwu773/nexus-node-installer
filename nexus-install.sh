@@ -436,12 +436,6 @@ ensure_package_installed_silent() {
     local pkg="$1"
     local is_installed=false
     
-    # Update package repositories silently on first package installation attempt
-    if [ ! -f "/tmp/.nexus_auto_update_repos_updated" ]; then
-        sudo apt update >/dev/null 2>&1 || true
-        touch "/tmp/.nexus_auto_update_repos_updated" 2>/dev/null || true
-    fi
-    
     # Special checks for different package types (silent)
     case "$pkg" in
         "build-essential")
@@ -492,6 +486,7 @@ ensure_package_installed_silent() {
 
 # Function to build from source (robust, silent)
 build_nexus_from_source_silent() {
+    
     # Install build dependencies one by one, silent
     ensure_package_installed_silent "build-essential" || return 1
     ensure_package_installed_silent "libssl-dev" || return 1
@@ -553,9 +548,17 @@ main() {
     CURRENT_VERSION=$(get_current_nexus_version_silent)
     LATEST_VERSION=$(get_latest_nexus_version_silent)
     if [ "$CURRENT_VERSION" != "unknown" ] && [ "$LATEST_VERSION" != "unknown" ] && [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+
         tmux kill-session -t nexus 2>/dev/null || true
         pkill -f "nexus-network" 2>/dev/null || true
         sleep 3
+
+        # Update package repositories silently on first package installation attempt
+        if [ ! -f "/tmp/.nexus_auto_update_repos_updated" ]; then
+            sudo apt update >/dev/null 2>&1 || true
+            touch "/tmp/.nexus_auto_update_repos_updated" 2>/dev/null || true
+        fi
+
         if update_nexus_cli_silent || build_nexus_from_source_silent; then
             if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 sleep 2
