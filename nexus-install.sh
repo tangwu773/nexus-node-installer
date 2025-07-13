@@ -436,6 +436,12 @@ ensure_package_installed_silent() {
     local pkg="$1"
     local is_installed=false
     
+    # Update package repositories silently on first package installation attempt
+    if [ ! -f "/tmp/.nexus_auto_update_repos_updated" ]; then
+        sudo apt update >/dev/null 2>&1 || true
+        touch "/tmp/.nexus_auto_update_repos_updated" 2>/dev/null || true
+    fi
+    
     # Special checks for different package types (silent)
     case "$pkg" in
         "build-essential")
