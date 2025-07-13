@@ -406,6 +406,9 @@ show_memory_status() {
         printf "│ Оперативка (RAM) │ %8s │ %8s │ %8s │\n", total, used, free
     }'
     
+    # Add separator line
+    echo "├──────────────────┼──────────┼──────────┼──────────┤"
+    
     # Проверяем, есть ли активный файл подкачки
     if swapon --show 2>/dev/null | grep -q .; then
         free -h | awk '
@@ -416,7 +419,7 @@ show_memory_status() {
             printf "│ Подкачка (Swap)  │ %8s │ %8s │ %8s │\n", total, used, free
         }'
     else
-        echo "│ Подкачка (Swap)  │          Не используется          │"
+        echo "│ Подкачка (Swap)  │        НЕ ИСПОЛЬЗУЕТСЯ        │"
     fi
     echo "└──────────────────┴──────────┴──────────┴──────────┘"
 }
