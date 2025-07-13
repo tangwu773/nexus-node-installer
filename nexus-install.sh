@@ -547,7 +547,7 @@ echo ""
 # Check if tmux, cron, jq is installed first
 ensure_package_installed "tmux" "tmux" "false"
 ensure_package_installed "cron" "cronie" "false"
-ensure_package_installed "jq" "jq" "true"
+ensure_package_installed "jq" "jq" "false"
 
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
