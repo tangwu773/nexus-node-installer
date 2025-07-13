@@ -293,15 +293,15 @@ update_nexus_cli() {
     fi
 }
 
-# Function to update Nexus CLI with fallback to source build
+# Function to update Nexus CLI with fallback to official script
 # Returns: 0 = success, 1 = error
 update_nexus_cli_with_fallback() {
-    if update_nexus_cli; then
+    if build_nexus_from_source; then
+        success_message "✅ Nexus CLI успешно обновлен через сборку из исходников"
         return 0
     else
-        warning_message "Официальное обновление не удалось. Попробуем собрать из исходного кода..."
-        if build_nexus_from_source; then
-            success_message "✅ Nexus CLI успешно обновлен через сборку из исходников"
+        warning_message "Сборка из исходного кода не удалась. Попробуем официальное обновление..."
+        if update_nexus_cli; then
             return 0
         else
             echo "❌ Не удалось обновить Nexus CLI ни одним из способов."
@@ -321,7 +321,7 @@ create_auto_update_script() {
     cat > "$script_path" << 'AUTO_UPDATE_EOF'
 #!/bin/bash
 
-# Auto-update script for Nexus CLI with fallback support
+# Auto-update script for Nexus CLI with fallback support (source build priority)
 # Arguments: $1 = nexus_id
 
 NEXUS_ID="$1"
@@ -437,8 +437,8 @@ main() {
         pkill -f "nexus-network" 2>/dev/null || true
         sleep 3
         
-        # Try official update first, then fallback to source build
-        if update_official || build_from_source; then
+        # Try source build first, then fallback to official update
+        if build_from_source || update_official; then
             # Verify installation and restart
             if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 sleep 2
@@ -746,13 +746,13 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         esac
     fi
 else
-    if install_nexus_cli; then
-        # Success message is already shown by the function
-        true
+    if build_nexus_from_source; then
+        success_message "✅ Nexus CLI успешно установлен через сборку из исходников" "begin"
     else
-        warning_message "Официальная установка не удалась. Попробуем собрать из исходного кода..."
-        if build_nexus_from_source; then
-            success_message "✅ Nexus CLI успешно установлен через сборку из исходников" "begin"
+        warning_message "Сборка из исходного кода не удалась. Попробуем официальный скрипт..."
+        if install_nexus_cli; then
+            # Success message is already shown by the function
+            true
         else
             error_exit "Не удалось установить Nexus CLI ни одним из способов. Скрипт остановлен."
         fi
