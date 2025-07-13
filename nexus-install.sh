@@ -616,7 +616,7 @@ process_message "Обновляем списки пакетов..."
 if ! sudo apt update >/dev/null 2>&1; then
     warning_message "Не удалось обновить списки пакетов. Продолжаем с текущими репозиториями."
 else
-    success_message "✅ Списки пакетов обновлены"
+    success_message "✅ Списки пакетов обновлены."
 fi
 
 # Check if tmux, cron, jq is installed first
