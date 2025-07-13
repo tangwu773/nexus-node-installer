@@ -721,7 +721,7 @@ fi
 # Ask about auto-update before final messages
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
-printf "\033[1;32m🔄 АВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ\033[0m\n"
+printf "\033[1;32mАВТОМАТИЧЕСКОЕ ОБНОВЛЕНИЕ\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 
 # Remove any existing auto-update cron jobs first
