@@ -415,12 +415,10 @@ show_memory_status() {
             free = $4; gsub(/Gi/, "Гб", free); gsub(/Mi/, "Мб", free); gsub(/Ki/, "Кб", free);
             printf "│ Подкачка (Swap)  │ %8s │ %8s │ %8s │\n", total, used, free
         }'
-        echo "└──────────────────┴──────────┴──────────┴──────────┘"
     else
-        echo "└──────────────────┴──────────┴──────────┴──────────┘"
-        echo ""
-        echo "🟡 Файл подкачки не используется"
+        echo "│ Подкачка (Swap)  │          Не используется          │"
     fi
+    echo "└──────────────────┴──────────┴──────────┴──────────┘"
 }
 
 
@@ -517,7 +515,7 @@ SWAP_SIZE=${SWAP_SIZE:-12}
 
 echo ""
 if [ "$SWAP_SIZE" = "0" ]; then
-    success_message "✅ Файл подкачки не нужен" "end"
+    success_message "✅ Файл подкачки не нужен"
 else
     success_message "✅ Создать файл подкачки размером ${SWAP_SIZE}Гб" "end"
 fi
