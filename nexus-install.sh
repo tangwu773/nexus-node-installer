@@ -511,18 +511,46 @@ echo "Текущее состояние оперативной памяти и �
 show_memory_status
 echo ""
 
+# Ask for swap size with validation
+SWAP_SIZE=""
+ATTEMPT=1
+MAX_ATTEMPTS=10
 
-echo "Размер файла подкачки в ГБ (Enter = 12ГБ, 0 = не создавать): "
-read SWAP_SIZE </dev/tty
-# Set default value if user doesn't enter anything
-SWAP_SIZE=${SWAP_SIZE:-12}
+while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+    echo "Размер файла подкачки в ГБ (Enter = 12ГБ, 0 = не создавать): "
+    read SWAP_SIZE </dev/tty
+    
+    # Trim whitespace
+    SWAP_SIZE=$(echo "$SWAP_SIZE" | xargs 2>/dev/null || echo "$SWAP_SIZE")
+    
+    # If user didn't enter anything, use default
+    if [ -z "$SWAP_SIZE" ]; then
+        SWAP_SIZE="12"
+        success_message "✅ Используем значение по умолчанию: ${SWAP_SIZE}ГБ"
+        break
+    fi
+    
+    # Check if SWAP_SIZE is a valid number (only digits) and within reasonable range (0-128)
+    if [ -n "$SWAP_SIZE" ] && [[ "$SWAP_SIZE" =~ ^[0-9]+$ ]] && [ "$SWAP_SIZE" -ge 0 ] && [ "$SWAP_SIZE" -le 128 ]; then
+        if [ "$SWAP_SIZE" = "0" ]; then
+            success_message "✅ Файл подкачки не нужен" "begin"
+        else
+            success_message "✅ Создать файл подкачки размером ${SWAP_SIZE}Гб" "begin"
+        fi
+        break
+    else
+        # Silent retry - just clear the invalid input
+        SWAP_SIZE=""
+    fi
+    
+    ATTEMPT=$((ATTEMPT + 1))
+done
+
+if [ -z "$SWAP_SIZE" ]; then
+    error_exit "Размер файла подкачки должен быть числом от 0 до 128. Запустите скрипт заново и введите корректное значение."
+fi
 
 echo ""
-if [ "$SWAP_SIZE" = "0" ]; then
-    success_message "✅ Файл подкачки не нужен" "end"
-else
-    success_message "✅ Создать файл подкачки размером ${SWAP_SIZE}Гб" "end"
-fi
 sleep 1
 
 # Remove existing swap file if it exists
