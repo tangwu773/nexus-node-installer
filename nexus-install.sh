@@ -116,9 +116,19 @@ ensure_package_installed() {
     process_message "Устанавливаем $pkg..."
     
     if [ -x "$(command -v apt)" ]; then
+        # Try to install the package, if it fails try updating repositories first
         if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1; then
-            echo "❌ Не удалось установить $pkg"
-            return 1
+            process_message "Первая попытка неудачна, обновляем репозитории..."
+            if sudo apt update >/dev/null 2>&1; then
+                # Retry installation after updating repositories
+                if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1; then
+                    echo "❌ Не удалось установить $pkg"
+                    return 1
+                fi
+            else
+                echo "❌ Не удалось установить $pkg"
+                return 1
+            fi
         fi
     else
         echo "❌ Система не поддерживается. Требуется Debian/Ubuntu с менеджером пакетов apt"
@@ -610,6 +620,14 @@ printf "\033[1;32m================================================\033[0m\n"
 printf "\033[1;32mПРОВЕРКА УСТАНОВЛЕННОГО ПО\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 echo ""
+
+# Update package repositories first
+process_message "Обновляем списки пакетов..."
+if ! sudo apt update >/dev/null 2>&1; then
+    warning_message "Не удалось обновить списки пакетов. Продолжаем с текущими репозиториями."
+else
+    success_message "✅ Списки пакетов обновлены"
+fi
 
 # Check if tmux, cron, jq is installed first
 ensure_package_installed "tmux"
