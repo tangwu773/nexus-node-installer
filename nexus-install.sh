@@ -99,6 +99,14 @@ ensure_package_installed() {
                 is_installed=true
             fi
             ;;
+        "libprotobuf-dev")
+            # Check for protobuf development files
+            if [ -f "/usr/include/google/protobuf/message.h" ] || [ -f "/usr/local/include/google/protobuf/message.h" ]; then
+                is_installed=true
+            elif command -v pkg-config &> /dev/null && pkg-config --exists protobuf 2>/dev/null; then
+                is_installed=true
+            fi
+            ;;
         *)
             # Default check for other packages (commands, binaries)
             if command -v "$pkg" &> /dev/null; then
@@ -204,6 +212,45 @@ get_latest_nexus_version() {
     return 1
 }
 
+# Function to install Nexus CLI via direct binary download
+# Returns: 0 = success, 1 = error
+install_nexus_cli_binary() {
+    process_message "🔄 Загружаем Nexus CLI бинарный файл напрямую..."
+    
+    # Create necessary directories
+    mkdir -p "$HOME/.nexus/bin" 2>/dev/null
+    
+    # Получаем последнюю версию с GitHub API
+    local latest_version=$(get_latest_nexus_version)
+    if [ "$latest_version" = "не удалось определить" ]; then
+        echo "❌ Не удалось получить номер последней версии из GitHub."
+        return 1
+    fi
+    
+    local download_url="https://github.com/nexus-xyz/nexus-cli/releases/download/v${latest_version}/nexus-network-linux-x86_64"
+    process_message "Загружаем последнюю версию v${latest_version}..."
+    
+    # Download the binary with error handling
+    if wget -q --timeout=30 --tries=3 -O "$HOME/.nexus/bin/nexus-network" "$download_url" 2>/dev/null; then
+        # Make executable
+        chmod +x "$HOME/.nexus/bin/nexus-network"
+        
+        # Verify the binary works
+        if [ -f "$HOME/.nexus/bin/nexus-network" ] && "$HOME/.nexus/bin/nexus-network" --version >/dev/null 2>&1; then
+            local binary_version=$($HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' || echo "unknown")
+            success_message "✅ Nexus CLI успешно загружен (версия: $binary_version)." "begin"
+            return 0
+        else
+            echo "❌ Загруженный бинарный файл не работает корректно."
+            rm -f "$HOME/.nexus/bin/nexus-network" 2>/dev/null
+            return 1
+        fi
+    else
+        echo "❌ Не удалось загрузить бинарный файл Nexus CLI."
+        return 1
+    fi
+}
+
 # Function to build Nexus CLI from source code
 # Returns: 0 = success, 1 = error
 build_nexus_from_source() {
@@ -215,6 +262,7 @@ build_nexus_from_source() {
     ensure_package_installed "pkg-config" || return 1
     ensure_package_installed "git" || return 1
     ensure_package_installed "protobuf-compiler" || return 1
+    ensure_package_installed "libprotobuf-dev" || return 1
 
     # Check if Rust is installed
     if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
@@ -304,6 +352,32 @@ install_nexus_cli() {
     fi
 }
 
+# Function to install Nexus CLI with three-tier fallback approach
+# Returns: 0 = success, 1 = error
+install_nexus_cli_with_fallback() {
+    # Tier 1: Direct binary download via wget (fastest and most reliable)
+    if install_nexus_cli_binary; then
+        return 0
+    else
+        warning_message "Прямая загрузка бинарника не удалась. Попробуем официальный скрипт..."
+        
+        # Tier 2: Official installation script
+        if install_nexus_cli; then
+            return 0
+        else
+            warning_message "Официальный скрипт установки не удался. Попробуем сборку из исходного кода..."
+            
+            # Tier 3: Build from source (most reliable but slowest)
+            if build_nexus_from_source; then
+                return 0
+            else
+                echo "❌ Не удалось установить Nexus CLI ни одним из способов."
+                return 1
+            fi
+        fi
+    fi
+}
+
 # Function to update Nexus CLI using non-interactive mode
 # Returns: 0 = success, 1 = error
 update_nexus_cli() {
@@ -342,18 +416,28 @@ update_nexus_cli() {
     fi
 }
 
-# Function to update Nexus CLI with fallback to source build
+# Function to update Nexus CLI with three-tier fallback approach
 # Returns: 0 = success, 1 = error
 update_nexus_cli_with_fallback() {
-    if update_nexus_cli; then
+    # Tier 1: Direct binary download via wget (fastest and most reliable)
+    if install_nexus_cli_binary; then
         return 0
     else
-        warning_message "Официальное обновление не удалось. Попробуем сборку из исходного кода..."
-        if build_nexus_from_source; then
+        warning_message "Прямая загрузка бинарника не удалась. Попробуем официальное обновление..."
+        
+        # Tier 2: Official update script
+        if update_nexus_cli; then
             return 0
         else
-            echo "❌ Не удалось обновить Nexus CLI ни одним из способов."
-            return 1
+            warning_message "Официальное обновление не удалось. Попробуем сборку из исходного кода..."
+            
+            # Tier 3: Build from source
+            if build_nexus_from_source; then
+                return 0
+            else
+                echo "❌ Не удалось обновить Nexus CLI ни одним из способов."
+                return 1
+            fi
         fi
     fi
 }
@@ -401,6 +485,50 @@ get_latest_nexus_version() {
         [ $attempt -le $max_attempts ] && sleep 2
     done
     echo "unknown"
+    return 1
+}
+
+# Function to get latest version from GitHub (silent version for auto-update)
+get_latest_nexus_version_silent() {
+    local max_attempts=3
+    local attempt=1
+    while [ $attempt -le $max_attempts ]; do
+        local api_response=$(curl -s --max-time 3 https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null)
+        if [ -n "$api_response" ] && echo "$api_response" | jq -e '.tag_name' >/dev/null 2>&1; then
+            local version=$(echo "$api_response" | jq -r '.tag_name' | sed 's/^v//')
+            if [ -n "$version" ] && [[ "$version" =~ ^[0-9]+(\.[0-9]+)*.*$ ]]; then
+                echo "$version"
+                return 0
+            fi
+        fi
+        attempt=$((attempt + 1))
+        [ $attempt -le $max_attempts ] && sleep 2
+    done
+    echo "unknown"
+    return 1
+}
+
+# Function to update via direct binary download (silent)
+update_nexus_cli_binary_silent() {
+    mkdir -p "$HOME/.nexus/bin" 2>/dev/null
+    
+    # Получаем последнюю версию с GitHub API (silent)
+    local latest_version=$(get_latest_nexus_version_silent)
+    if [ "$latest_version" = "unknown" ]; then
+        return 1
+    fi
+    
+    local download_url="https://github.com/nexus-xyz/nexus-cli/releases/download/v${latest_version}/nexus-network-linux-x86_64"
+    
+    if wget -q --timeout=30 --tries=3 -O "$HOME/.nexus/bin/nexus-network" "$download_url" 2>/dev/null; then
+        chmod +x "$HOME/.nexus/bin/nexus-network"
+        if [ -f "$HOME/.nexus/bin/nexus-network" ] && "$HOME/.nexus/bin/nexus-network" --version >/dev/null 2>&1; then
+            return 0
+        else
+            rm -f "$HOME/.nexus/bin/nexus-network" 2>/dev/null
+            return 1
+        fi
+    fi
     return 1
 }
 
@@ -464,6 +592,13 @@ ensure_package_installed_silent() {
                 is_installed=true
             fi
             ;;
+        "libprotobuf-dev")
+            if [ -f "/usr/include/google/protobuf/message.h" ] || [ -f "/usr/local/include/google/protobuf/message.h" ]; then
+                is_installed=true
+            elif command -v pkg-config &> /dev/null && pkg-config --exists protobuf 2>/dev/null; then
+                is_installed=true
+            fi
+            ;;
         *)
             if command -v "$pkg" &> /dev/null; then
                 is_installed=true
@@ -493,6 +628,7 @@ build_nexus_from_source_silent() {
     ensure_package_installed_silent "pkg-config" || return 1
     ensure_package_installed_silent "git" || return 1
     ensure_package_installed_silent "protobuf-compiler" || return 1
+    ensure_package_installed_silent "libprotobuf-dev" || return 1
 
     # Check if Rust is installed
     if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
@@ -559,7 +695,8 @@ main() {
             touch "/tmp/.nexus_auto_update_repos_updated" 2>/dev/null || true
         fi
 
-        if update_nexus_cli_silent || build_nexus_from_source_silent; then
+        # Three-tier auto-update approach: wget binary → official script → source build
+        if update_nexus_cli_binary_silent || update_nexus_cli_silent || build_nexus_from_source_silent; then
             if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 sleep 2
                 tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID" 2>/dev/null
@@ -628,10 +765,11 @@ else
     success_message "✅ Списки пакетов обновлены."
 fi
 
-# Check if tmux, cron, jq is installed first
+# Check if tmux, cron, jq, wget is installed first
 ensure_package_installed "tmux"
 ensure_package_installed "cron"
 ensure_package_installed "jq"
+ensure_package_installed "wget"
 
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
@@ -873,16 +1011,11 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         esac
     fi
 else
-    if install_nexus_cli; then
+    if install_nexus_cli_with_fallback; then
         # Success message is already shown by the function
         true
     else
-        warning_message "Официальный скрипт установки не удался. Попробуем сборку из исходного кода..."
-        if build_nexus_from_source; then
-            true
-        else
-            error_exit "Не удалось установить Nexus CLI ни одним из способов. Скрипт остановлен."
-        fi
+        error_exit "Не удалось установить Nexus CLI ни одним из способов. Скрипт остановлен."
     fi
 fi
 echo ""
