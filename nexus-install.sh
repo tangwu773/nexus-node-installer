@@ -342,14 +342,14 @@ update_nexus_cli() {
     fi
 }
 
-# Function to update Nexus CLI with fallback to official script
+# Function to update Nexus CLI with fallback to source build
 # Returns: 0 = success, 1 = error
 update_nexus_cli_with_fallback() {
-    if build_nexus_from_source; then
+    if update_nexus_cli; then
         return 0
     else
-        warning_message "Сборка из исходного кода не удалась. Попробуем официальное обновление..."
-        if update_nexus_cli; then
+        warning_message "Официальное обновление не удалось. Попробуем сборку из исходного кода..."
+        if build_nexus_from_source; then
             return 0
         else
             echo "❌ Не удалось обновить Nexus CLI ни одним из способов."
@@ -369,14 +369,14 @@ create_auto_update_script() {
     cat > "$script_path" << 'AUTO_UPDATE_EOF'
 #!/bin/bash
 
-# Auto-update script for Nexus CLI with fallback support (source build priority)
+# Auto-update script for Nexus CLI with fallback support (official script priority)
 # Arguments: $1 = nexus_id
 
 NEXUS_ID="$1"
 CONFIG_FILE="$HOME/.nexus_installer_config.json"
 
-# Function to get current Nexus CLI version (silent)
-get_current_version() {
+# Function to get current Nexus CLI version
+get_current_nexus_version() {
     if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         $HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//' || echo "unknown"
     else
@@ -384,8 +384,8 @@ get_current_version() {
     fi
 }
 
-# Function to get latest version from GitHub (silent, with retries)
-get_latest_version() {
+# Function to get latest version from GitHub (with retries)
+get_latest_nexus_version() {
     local max_attempts=3
     local attempt=1
     while [ $attempt -le $max_attempts ]; do
@@ -404,8 +404,8 @@ get_latest_version() {
     return 1
 }
 
-# Function to load Nexus ID from config (silent)
-load_nexus_id() {
+# Function to load Nexus ID from config
+load_saved_nexus_id() {
     if [ -f "$CONFIG_FILE" ]; then
         jq -r '.nexus_id // empty' "$CONFIG_FILE" 2>/dev/null || echo ""
     else
@@ -414,7 +414,7 @@ load_nexus_id() {
 }
 
 # Function to update via official script (silent)
-update_official() {
+update_nexus_cli_silent() {
     local installer_dir="$HOME/.nexus"
     local installer_file="$installer_dir/install.sh"
     mkdir -p "$installer_dir"
@@ -485,7 +485,7 @@ ensure_package_installed_silent() {
 }
 
 # Function to build from source (robust, silent)
-build_from_source() {
+build_nexus_from_source_silent() {
     # Install build dependencies one by one, silent
     ensure_package_installed_silent "build-essential" || return 1
     ensure_package_installed_silent "libssl-dev" || return 1
@@ -539,18 +539,18 @@ build_from_source() {
 # Main auto-update logic (silent)
 main() {
     if [ -z "$NEXUS_ID" ]; then
-        NEXUS_ID=$(load_nexus_id)
+        NEXUS_ID=$(load_saved_nexus_id)
     fi
     if [ -z "$NEXUS_ID" ]; then
         exit 0
     fi
-    CURRENT_VERSION=$(get_current_version)
-    LATEST_VERSION=$(get_latest_version)
+    CURRENT_VERSION=$(get_current_nexus_version_silent)
+    LATEST_VERSION=$(get_latest_nexus_version_silent)
     if [ "$CURRENT_VERSION" != "unknown" ] && [ "$LATEST_VERSION" != "unknown" ] && [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
         tmux kill-session -t nexus 2>/dev/null || true
         pkill -f "nexus-network" 2>/dev/null || true
         sleep 3
-        if build_from_source || update_official; then
+        if update_nexus_cli_silent || build_nexus_from_source_silent; then
             if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 sleep 2
                 tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID" 2>/dev/null
@@ -856,12 +856,12 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         esac
     fi
 else
-    if build_nexus_from_source; then
+    if install_nexus_cli; then
+        # Success message is already shown by the function
         true
     else
-        warning_message "Сборка из исходного кода не удалась. Попробуем официальный скрипт..."
-        if install_nexus_cli; then
-            # Success message is already shown by the function
+        warning_message "Официальный скрипт установки не удался. Попробуем сборку из исходного кода..."
+        if build_nexus_from_source; then
             true
         else
             error_exit "Не удалось установить Nexus CLI ни одним из способов. Скрипт остановлен."
