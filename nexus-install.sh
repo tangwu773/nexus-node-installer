@@ -60,38 +60,40 @@ success_message() {
 
 
 
-# Function to check and install a package if missing
-# Parameters: $1 = package name, $2 = "end" to skip empty line after success message (by default empty line is added)
+# Function to check and install a package if missing (silent mode with status only)
+# Parameters: $1 = package name, $2 = yum package name (optional), $3 = "end" to skip empty line after success message
 ensure_package_installed() {
     local pkg="$1"
-    local skip_end="$2"
+    local yum_pkg="${2:-$1}"
+    local skip_end="$3"
     
     if ! command -v "$pkg" &> /dev/null; then
-        process_message "$pkg не установлен. Установка $pkg..." "end"
+        process_message "Устанавливаем $pkg..."
         if [ -x "$(command -v apt)" ]; then
-            if ! sudo apt update; then
-                error_exit "Не удалось обновить список пакетов apt"
-            fi
-            if ! sudo apt install -y "$pkg"; then
-                error_exit "Не удалось установить $pkg через apt"
+            if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1; then
+                echo "❌ Не удалось установить $pkg через apt"
+                return 1
             fi
         elif [ -x "$(command -v yum)" ]; then
-            if ! sudo yum install -y "$pkg"; then
-                error_exit "Не удалось установить $pkg через yum"
+            if ! sudo yum install -y "$yum_pkg" >/dev/null 2>&1; then
+                echo "❌ Не удалось установить $pkg через yum"
+                return 1
             fi
         else
-            error_exit "Не удалось определить менеджер пакетов. Установите $pkg вручную."
+            echo "❌ Не удалось определить менеджер пакетов для установки $pkg"
+            return 1
         fi
         
-        # Add empty line after success message unless "end" is specified
-        if [ "$skip_end" = "end" ]; then
-            success_message "✅ $pkg успешно установлен." "begin"
+        # Add empty line after success message unless skip_end is true
+        if [ "$skip_end" = "true" ]; then
+            success_message "✅ $pkg успешно установлен" "begin"
         else
-            success_message "✅ $pkg успешно установлен." "beginend"
+            success_message "✅ $pkg успешно установлен"
         fi
     else
-        echo "✅ $pkg уже установлен."
+        echo "✅ $pkg уже установлен"
     fi
+    return 0
 }
 
 # Function to save Nexus ID to file
@@ -174,15 +176,15 @@ get_latest_nexus_version() {
 build_nexus_from_source() {
     process_message "🔄 Собираем Nexus CLI из исходного кода..."
 
-    # Install build dependencies quietly
+    # Install build dependencies with status messages
     process_message "Устанавливаем зависимости для сборки..."
-    if command -v apt >/dev/null 2>&1; then
-        sudo apt update >/dev/null 2>&1
-        sudo apt install -y build-essential libssl-dev pkg-config git protobuf-compiler >/dev/null 2>&1
-    elif command -v yum >/dev/null 2>&1; then
-        sudo yum groupinstall -y "Development Tools" >/dev/null 2>&1
-        sudo yum install -y openssl-devel pkgconfig git protobuf-compiler >/dev/null 2>&1
-    fi
+    
+    # Install individual packages using the updated function
+    ensure_package_installed "build-essential" "build-essential" "false" || return 1
+    ensure_package_installed "libssl-dev" "openssl-devel" "false" || return 1
+    ensure_package_installed "pkg-config" "pkgconfig" "false" || return 1
+    ensure_package_installed "git" "git" "false" || return 1
+    ensure_package_installed "protobuf-compiler" "protobuf-compiler" "true" || return 1
 
     # Check if Rust is installed
     if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
@@ -209,22 +211,11 @@ build_nexus_from_source() {
     cd "$build_dir" || return 1
     
     # Navigate to the CLI directory where Cargo.toml is located
-    if [ -d "clients/cli" ]; then
-        cd "clients/cli" || return 1
+    if [ -d "clients/cli" ] && cd "clients/cli" && [ -f "Cargo.toml" ]; then
+        # Directory exists and has Cargo.toml - continue
+        true
     else
-        echo "❌ Директория clients/cli не найдена в репозитории."
-        process_message "Структура директории:"
-        ls -la 2>/dev/null || true
-        cd "$HOME"
-        rm -rf "$build_dir" 2>/dev/null || true
-        return 1
-    fi
-    
-    # Check if Cargo.toml exists in the CLI directory
-    if [ ! -f "Cargo.toml" ]; then
-        echo "❌ Файл Cargo.toml не найден в clients/cli."
-        process_message "Структура директории clients/cli:"
-        ls -la 2>/dev/null || true
+        echo "❌ Не удалось найти clients/cli/Cargo.toml в репозитории."
         cd "$HOME"
         rm -rf "$build_dir" 2>/dev/null || true
         return 1
@@ -354,7 +345,7 @@ create_auto_update_script() {
 NEXUS_ID="$1"
 CONFIG_FILE="$HOME/.nexus_installer_config.json"
 
-# Function to get current Nexus CLI version
+# Function to get current Nexus CLI version (silent)
 get_current_version() {
     if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         $HOME/.nexus/bin/nexus-network --version 2>/dev/null | sed 's/nexus-network //' | sed 's/^v//' || echo "unknown"
@@ -363,12 +354,27 @@ get_current_version() {
     fi
 }
 
-# Function to get latest version from GitHub
+# Function to get latest version from GitHub (silent, with retries)
 get_latest_version() {
-    curl -s https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null | jq -r '.tag_name // empty' 2>/dev/null | sed 's/^v//' || echo "unknown"
+    local max_attempts=3
+    local attempt=1
+    while [ $attempt -le $max_attempts ]; do
+        local api_response=$(curl -s --max-time 3 https://api.github.com/repos/nexus-xyz/nexus-cli/releases/latest 2>/dev/null)
+        if [ -n "$api_response" ] && echo "$api_response" | jq -e '.tag_name' >/dev/null 2>&1; then
+            local version=$(echo "$api_response" | jq -r '.tag_name' | sed 's/^v//')
+            if [ -n "$version" ] && [[ "$version" =~ ^[0-9]+(\.[0-9]+)*.*$ ]]; then
+                echo "$version"
+                return 0
+            fi
+        fi
+        attempt=$((attempt + 1))
+        [ $attempt -le $max_attempts ] && sleep 2
+    done
+    echo "unknown"
+    return 1
 }
 
-# Function to load Nexus ID from config
+# Function to load Nexus ID from config (silent)
 load_nexus_id() {
     if [ -f "$CONFIG_FILE" ]; then
         jq -r '.nexus_id // empty' "$CONFIG_FILE" 2>/dev/null || echo ""
@@ -377,19 +383,14 @@ load_nexus_id() {
     fi
 }
 
-# Function to update via official script
+# Function to update via official script (silent)
 update_official() {
     local installer_dir="$HOME/.nexus"
     local installer_file="$installer_dir/install.sh"
-    
     mkdir -p "$installer_dir"
-    
     if curl -sSf https://cli.nexus.xyz/ -o "$installer_file" 2>/dev/null; then
         chmod +x "$installer_file"
-        
-        # Run installer silently
         if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
-            # Verify installation
             if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 rm -f "$installer_file"
                 return 0
@@ -400,91 +401,89 @@ update_official() {
     return 1
 }
 
-# Function to build from source (simplified version)
-build_from_source() {
-    # Install dependencies quietly
-    if command -v apt >/dev/null 2>&1; then
-        sudo apt update >/dev/null 2>&1
-        sudo apt install -y build-essential libssl-dev pkg-config git protobuf-compiler >/dev/null 2>&1
-    elif command -v yum >/dev/null 2>&1; then
-        sudo yum groupinstall -y "Development Tools" >/dev/null 2>&1
-        sudo yum install -y openssl-devel pkgconfig git protobuf-compiler >/dev/null 2>&1
+# Function to check and install a package if missing (silent, status only)
+ensure_package_installed_silent() {
+    local pkg="$1"
+    local yum_pkg="${2:-$1}"
+    if ! command -v "$pkg" &> /dev/null; then
+        if [ -x "$(command -v apt)" ]; then
+            sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1 || return 1
+        elif [ -x "$(command -v yum)" ]; then
+            sudo yum install -y "$yum_pkg" >/dev/null 2>&1 || return 1
+        else
+            return 1
+        fi
     fi
-    
-    # Install Rust if needed
-    if ! command -v cargo >/dev/null 2>&1; then
+    return 0
+}
+
+# Function to build from source (robust, silent)
+build_from_source() {
+    # Install build dependencies one by one, silent
+    ensure_package_installed_silent "build-essential" "build-essential" || return 1
+    ensure_package_installed_silent "libssl-dev" "openssl-devel" || return 1
+    ensure_package_installed_silent "pkg-config" "pkgconfig" || return 1
+    ensure_package_installed_silent "git" "git" || return 1
+    ensure_package_installed_silent "protobuf-compiler" "protobuf-compiler" || return 1
+
+    # Check if Rust is installed
+    if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable >/dev/null 2>&1
         source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
     fi
-    
-    # Build
+
+    # Clone and build
     local build_dir="$HOME/.nexus_build_auto"
-    rm -rf "$build_dir" 2>/dev/null
+    rm -rf "$build_dir" 2>/dev/null || true
     mkdir -p "$build_dir"
-    
-    if git clone https://github.com/nexus-xyz/nexus-cli.git "$build_dir" >/dev/null 2>&1; then
-        cd "$build_dir"
-        
-        # Navigate to the CLI directory where Cargo.toml is located
-        if [ -d "clients/cli" ]; then
-            cd "clients/cli"
+    if ! git clone https://github.com/nexus-xyz/nexus-cli.git "$build_dir" >/dev/null 2>&1; then
+        rm -rf "$build_dir" 2>/dev/null || true
+        return 1
+    fi
+    cd "$build_dir" || return 1
+    if [ -d "clients/cli" ] && cd "clients/cli" && [ -f "Cargo.toml" ]; then
+        true
+    else
+        cd "$HOME"
+        rm -rf "$build_dir" 2>/dev/null || true
+        return 1
+    fi
+    source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
+    if cargo build --release >/dev/null 2>&1; then
+        mkdir -p "$HOME/.nexus/bin"
+        if [ -f "target/release/nexus-network" ]; then
+            cp "target/release/nexus-network" "$HOME/.nexus/bin/"
+            chmod +x "$HOME/.nexus/bin/nexus-network"
+            cd "$HOME"
+            rm -rf "$build_dir" 2>/dev/null || true
+            return 0
         else
             cd "$HOME"
-            rm -rf "$build_dir" 2>/dev/null
+            rm -rf "$build_dir" 2>/dev/null || true
             return 1
         fi
-        
-        source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
-        
-        # Check if Cargo.toml exists before building
-        if [ ! -f "Cargo.toml" ]; then
-            cd "$HOME"
-            rm -rf "$build_dir" 2>/dev/null
-            return 1
-        fi
-        
-        if cargo build --release >/dev/null 2>&1; then
-            if [ -f "target/release/nexus-network" ]; then
-                mkdir -p "$HOME/.nexus/bin"
-                cp "target/release/nexus-network" "$HOME/.nexus/bin/"
-                chmod +x "$HOME/.nexus/bin/nexus-network"
-                cd "$HOME"
-                rm -rf "$build_dir" 2>/dev/null
-                return 0
-            fi
-        fi
+    else
         cd "$HOME"
-        rm -rf "$build_dir" 2>/dev/null
+        rm -rf "$build_dir" 2>/dev/null || true
+        return 1
     fi
-    return 1
 }
 
-# Main auto-update logic
+# Main auto-update logic (silent)
 main() {
-    # Use provided Nexus ID or load from config
     if [ -z "$NEXUS_ID" ]; then
         NEXUS_ID=$(load_nexus_id)
     fi
-    
-    # Exit if no Nexus ID available
     if [ -z "$NEXUS_ID" ]; then
         exit 0
     fi
-    
-    # Get current and latest versions
     CURRENT_VERSION=$(get_current_version)
     LATEST_VERSION=$(get_latest_version)
-    
-    # Check if update is needed
     if [ "$CURRENT_VERSION" != "unknown" ] && [ "$LATEST_VERSION" != "unknown" ] && [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
-        # Stop all Nexus processes
         tmux kill-session -t nexus 2>/dev/null || true
         pkill -f "nexus-network" 2>/dev/null || true
         sleep 3
-        
-        # Try source build first, then fallback to official update
         if build_from_source || update_official; then
-            # Verify installation and restart
             if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 sleep 2
                 tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID" 2>/dev/null
@@ -493,7 +492,6 @@ main() {
     fi
 }
 
-# Run main function
 main
 AUTO_UPDATE_EOF
     
@@ -547,9 +545,9 @@ printf "\033[1;32m================================================\033[0m\n"
 echo ""
 
 # Check if tmux, cron, jq is installed first
-ensure_package_installed "tmux"
-ensure_package_installed "cron"
-ensure_package_installed "jq" "end"
+ensure_package_installed "tmux" "tmux" "false"
+ensure_package_installed "cron" "cronie" "false"
+ensure_package_installed "jq" "jq" "true"
 
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
@@ -866,7 +864,7 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
 done
 
 if [ -z "$NEXUS_ID" ]; then
-    error_exit "Nexus ID должен содержать только цифры. Запустите скрипт заново и введите корректный Nexus ID."
+    error_exit "Nexus ID должен содержать только цифры. Запустите скрипт заново и явведите корректный Nexus ID."
 fi
 
 echo ""
