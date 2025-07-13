@@ -204,6 +204,17 @@ build_nexus_from_source() {
     fi
 
     cd "$build_dir" || return 1
+    
+    # Check if Cargo.toml exists
+    if [ ! -f "Cargo.toml" ]; then
+        echo "❌ Файл Cargo.toml не найден в репозитории."
+        process_message "Структура директории:"
+        ls -la 2>/dev/null || true
+        cd "$HOME"
+        rm -rf "$build_dir" 2>/dev/null || true
+        return 1
+    fi
+    
     source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
 
     process_message "Собираем проект (это может занять несколько минут)..."
@@ -397,6 +408,13 @@ build_from_source() {
     if git clone https://github.com/nexus-xyz/nexus-cli.git "$build_dir" >/dev/null 2>&1; then
         cd "$build_dir"
         source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
+        
+        # Check if Cargo.toml exists before building
+        if [ ! -f "Cargo.toml" ]; then
+            cd "$HOME"
+            rm -rf "$build_dir" 2>/dev/null
+            return 1
+        fi
         
         if cargo build --release >/dev/null 2>&1; then
             if [ -f "target/release/nexus-network" ]; then
