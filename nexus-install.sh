@@ -369,36 +369,35 @@ install_nexus_cli_official_silent() {
 install_nexus_cli() {
     local mode="$1"
     
-    # Tier 1: Direct binary download via wget (fastest and most reliable)
+    # Tier 1: Official installation script (most reliable for updates)
+    process_message "🔄 Устанавливаем Nexus CLI через официальный скрипт..."
+    if [ "$mode" = "update" ]; then
+        if install_nexus_cli_official_silent; then
+            return 0
+        fi
+    else
+        if install_nexus_cli_official; then
+            return 0
+        fi
+    fi
+
+    warning_message "Официальный скрипт установки не удался. Попробуем загрузку бинарника..."
+
+    # Tier 2: Direct binary download
     process_message "🔄 Загружаем последнюю версию бинарного файла Nexus CLI напрямую с Github..."
     if install_nexus_cli_binary; then
         return 0
+    fi
+
+    warning_message "Прямая загрузка бинарника не удалась. Попробуем сборку из исходного кода..."
+
+    # Tier 3: Build from source (most reliable but slowest)
+    process_message "🔄 Собираем Nexus CLI из исходного кода..."
+    if install_nexus_from_source; then
+        return 0
     else
-        warning_message "Прямая загрузка бинарника не удалась. Попробуем официальный скрипт..."
-        
-        # Tier 2: Official installation script (silent or interactive based on mode)
-        if [ "$mode" = "update" ]; then
-            process_message "🔄 Обновляем Nexus CLI через официальный скрипт..."
-            if install_nexus_cli_official_silent; then
-                return 0
-            fi
-        else
-            process_message "🔄 Устанавливаем Nexus CLI через официальный скрипт..."
-            if install_nexus_cli_official; then
-                return 0
-            fi
-        fi
-        
-        warning_message "Официальный скрипт установки не удался. Попробуем сборку из исходного кода..."
-        
-        # Tier 3: Build from source (most reliable but slowest)
-        process_message "🔄 Собираем Nexus CLI из исходного кода..."
-        if install_nexus_from_source; then
-            return 0
-        else
-            echo "❌ Не удалось установить Nexus CLI ни одним из способов."
-            return 1
-        fi
+        echo "❌ Не удалось установить Nexus CLI ни одним из способов."
+        return 1
     fi
 }
 
@@ -661,8 +660,8 @@ main() {
             touch "/tmp/.nexus_auto_update_repos_updated" 2>/dev/null || true
         fi
 
-        # Three-tier auto-update approach: wget binary → official script → source build
-        if install_nexus_cli_binary_silent || install_nexus_cli_official_silent || install_nexus_cli_from_source_silent; then
+        # Three-tier auto-update approach: official script → wget binary → source build
+        if install_nexus_cli_official_silent || install_nexus_cli_binary_silent || install_nexus_cli_from_source_silent; then
             if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 sleep 2
                 tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID" 2>/dev/null
