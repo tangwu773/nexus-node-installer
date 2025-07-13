@@ -293,6 +293,23 @@ update_nexus_cli() {
     fi
 }
 
+# Function to update Nexus CLI with fallback to source build
+# Returns: 0 = success, 1 = error
+update_nexus_cli_with_fallback() {
+    if update_nexus_cli; then
+        return 0
+    else
+        warning_message "Официальное обновление не удалось. Попробуем собрать из исходного кода..."
+        if build_nexus_from_source; then
+            success_message "✅ Nexus CLI успешно обновлен через сборку из исходников"
+            return 0
+        else
+            echo "❌ Не удалось обновить Nexus CLI ни одним из способов."
+            return 1
+        fi
+    fi
+}
+
 # Function to create auto-update script
 create_auto_update_script() {
     local script_path="$HOME/.nexus/auto_update.sh"
@@ -304,7 +321,7 @@ create_auto_update_script() {
     cat > "$script_path" << 'AUTO_UPDATE_EOF'
 #!/bin/bash
 
-# Auto-update script for Nexus CLI
+# Auto-update script for Nexus CLI with fallback support
 # Arguments: $1 = nexus_id
 
 NEXUS_ID="$1"
@@ -333,6 +350,70 @@ load_nexus_id() {
     fi
 }
 
+# Function to update via official script
+update_official() {
+    local installer_dir="$HOME/.nexus"
+    local installer_file="$installer_dir/install.sh"
+    
+    mkdir -p "$installer_dir"
+    
+    if curl -sSf https://cli.nexus.xyz/ -o "$installer_file" 2>/dev/null; then
+        chmod +x "$installer_file"
+        
+        # Run installer silently
+        if NONINTERACTIVE=1 "$installer_file" >/dev/null 2>&1; then
+            # Verify installation
+            if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+                rm -f "$installer_file"
+                return 0
+            fi
+        fi
+        rm -f "$installer_file"
+    fi
+    return 1
+}
+
+# Function to build from source (simplified version)
+build_from_source() {
+    # Install dependencies quietly
+    if command -v apt >/dev/null 2>&1; then
+        sudo apt update >/dev/null 2>&1
+        sudo apt install -y build-essential libssl-dev pkg-config git protobuf-compiler >/dev/null 2>&1
+    elif command -v yum >/dev/null 2>&1; then
+        sudo yum install -y gcc gcc-c++ openssl-devel pkgconfig git protobuf-compiler >/dev/null 2>&1
+    fi
+    
+    # Install Rust if needed
+    if ! command -v cargo >/dev/null 2>&1; then
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable >/dev/null 2>&1
+        source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
+    fi
+    
+    # Build
+    local build_dir="$HOME/.nexus_build_auto"
+    rm -rf "$build_dir" 2>/dev/null
+    mkdir -p "$build_dir"
+    
+    if git clone https://github.com/nexus-xyz/nexus-cli.git "$build_dir" >/dev/null 2>&1; then
+        cd "$build_dir"
+        source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
+        
+        if cargo build --release >/dev/null 2>&1; then
+            if [ -f "target/release/nexus-network" ]; then
+                mkdir -p "$HOME/.nexus/bin"
+                cp "target/release/nexus-network" "$HOME/.nexus/bin/"
+                chmod +x "$HOME/.nexus/bin/nexus-network"
+                cd "$HOME"
+                rm -rf "$build_dir" 2>/dev/null
+                return 0
+            fi
+        fi
+        cd "$HOME"
+        rm -rf "$build_dir" 2>/dev/null
+    fi
+    return 1
+}
+
 # Main auto-update logic
 main() {
     # Use provided Nexus ID or load from config
@@ -356,26 +437,13 @@ main() {
         pkill -f "nexus-network" 2>/dev/null || true
         sleep 3
         
-        # Download and run installer in non-interactive mode
-        INSTALLER_DIR="$HOME/.nexus"
-        INSTALLER_FILE="$INSTALLER_DIR/install.sh"
-        
-        mkdir -p "$INSTALLER_DIR"
-        
-        if curl -sSf https://cli.nexus.xyz/ -o "$INSTALLER_FILE" 2>/dev/null; then
-            chmod +x "$INSTALLER_FILE"
-            
-            # Run installer silently
-            if NONINTERACTIVE=1 "$INSTALLER_FILE" >/dev/null 2>&1; then
-                # Verify installation
-                if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
-                    # Restart Nexus session
-                    sleep 2
-                    tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID" 2>/dev/null
-                fi
+        # Try official update first, then fallback to source build
+        if update_official || build_from_source; then
+            # Verify installation and restart
+            if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
+                sleep 2
+                tmux new-session -d -s nexus "$HOME/.nexus/bin/nexus-network start --node-id $NEXUS_ID" 2>/dev/null
             fi
-            
-            rm -f "$INSTALLER_FILE"
         fi
     fi
 }
@@ -651,7 +719,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
                 ;;
             *)
                 success_message "✅ Переустанавливаем Nexus CLI." "beginend"
-                if update_nexus_cli; then
+                if update_nexus_cli_with_fallback; then
                     true
                 else
                     warning_message "Не удалось переустановить Nexus CLI."
@@ -666,7 +734,7 @@ if [ -f "$HOME/.nexus/bin/nexus-network" ]; then
         case "${REINSTALL_CHOICE,,}" in
             y|yes|да|д)
                 success_message "✅ Переустанавливаем Nexus CLI." "beginend"
-                if update_nexus_cli; then
+                if update_nexus_cli_with_fallback; then
                     true
                 else
                     warning_message "Не удалось переустановить Nexus CLI."
@@ -682,8 +750,12 @@ else
         # Success message is already shown by the function
         true
     else
-        error_exit "Не удалось установить Nexus CLI. Скрипт остановлен."
-        sleep 2
+        warning_message "Официальная установка не удалась. Попробуем собрать из исходного кода..."
+        if build_nexus_from_source; then
+            success_message "✅ Nexus CLI успешно установлен через сборку из исходников" "begin"
+        else
+            error_exit "Не удалось установить Nexus CLI ни одним из способов. Скрипт остановлен."
+        fi
     fi
 fi
 echo ""
