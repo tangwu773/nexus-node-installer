@@ -60,33 +60,72 @@ success_message() {
 
 
 
-# Function to check and install a package if missing (silent mode with status only)
-# Parameters: $1 = package name, $2 = yum package name (optional)
+# Function to check and install a package if missing (improved package detection)
+# Parameters: $1 = package name
 ensure_package_installed() {
     local pkg="$1"
-    local yum_pkg="${2:-$1}"
+    local is_installed=false
     
-    if ! command -v "$pkg" &> /dev/null; then
-        process_message "Устанавливаем $pkg..."
-        if [ -x "$(command -v apt)" ]; then
-            if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1; then
-                echo "❌ Не удалось установить $pkg через apt"
-                return 1
+    # Special checks for different package types
+    case "$pkg" in
+        "build-essential")
+            # Check for essential build tools on Debian/Ubuntu
+            if command -v gcc &> /dev/null && command -v make &> /dev/null && command -v g++ &> /dev/null; then
+                is_installed=true
+            elif [ -x "$(command -v apt)" ]; then
+                # Additional check via dpkg for Debian-based systems
+                if dpkg -l build-essential 2>/dev/null | grep -q "^ii"; then
+                    is_installed=true
+                fi
             fi
-        elif [ -x "$(command -v yum)" ]; then
-            if ! sudo yum install -y "$yum_pkg" >/dev/null 2>&1; then
-                echo "❌ Не удалось установить $pkg через yum"
-                return 1
+            ;;
+        "libssl-dev"|"openssl-devel")
+            # Check for SSL development files
+            if [ -f "/usr/include/openssl/ssl.h" ] || [ -f "/usr/include/openssl/opensslv.h" ]; then
+                is_installed=true
+            elif command -v pkg-config &> /dev/null && pkg-config --exists openssl 2>/dev/null; then
+                is_installed=true
             fi
-        else
-            echo "❌ Не удалось определить менеджер пакетов для установки $pkg"
+            ;;
+        "pkg-config"|"pkgconfig")
+            # Standard command check works well for pkg-config
+            if command -v pkg-config &> /dev/null; then
+                is_installed=true
+            fi
+            ;;
+        "protobuf-compiler")
+            # Check for protoc compiler
+            if command -v protoc &> /dev/null; then
+                is_installed=true
+            fi
+            ;;
+        *)
+            # Default check for other packages (commands, binaries)
+            if command -v "$pkg" &> /dev/null; then
+                is_installed=true
+            fi
+            ;;
+    esac
+    
+    if [ "$is_installed" = true ]; then
+        echo "✅ $pkg уже установлен"
+        return 0
+    fi
+    
+    # Install the package
+    process_message "Устанавливаем $pkg..."
+    
+    if [ -x "$(command -v apt)" ]; then
+        if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1; then
+            echo "❌ Не удалось установить $pkg"
             return 1
         fi
-        
-        success_message "✅ $pkg успешно установлен"
     else
-        echo "✅ $pkg уже установлен"
+        echo "❌ Система не поддерживается. Требуется Debian/Ubuntu с менеджером пакетов apt"
+        return 1
     fi
+    
+    success_message "✅ $pkg успешно установлен"
     return 0
 }
 
@@ -171,11 +210,11 @@ build_nexus_from_source() {
     process_message "🔄 Собираем Nexus CLI из исходного кода..."
     
     # Install individual packages using the updated function
-    ensure_package_installed "build-essential" "build-essential" || return 1
-    ensure_package_installed "libssl-dev" "openssl-devel" || return 1
-    ensure_package_installed "pkg-config" "pkgconfig" || return 1
-    ensure_package_installed "git" "git" || return 1
-    ensure_package_installed "protobuf-compiler" "protobuf-compiler" || return 1
+    ensure_package_installed "build-essential" || return 1
+    ensure_package_installed "libssl-dev" || return 1
+    ensure_package_installed "pkg-config" || return 1
+    ensure_package_installed "git" || return 1
+    ensure_package_installed "protobuf-compiler" || return 1
 
     # Check if Rust is installed
     if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
@@ -392,18 +431,55 @@ update_official() {
     return 1
 }
 
-# Function to check and install a package if missing (silent, status only)
+# Function to check and install a package if missing (silent, improved detection)
 ensure_package_installed_silent() {
     local pkg="$1"
-    local yum_pkg="${2:-$1}"
-    if ! command -v "$pkg" &> /dev/null; then
-        if [ -x "$(command -v apt)" ]; then
-            sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1 || return 1
-        elif [ -x "$(command -v yum)" ]; then
-            sudo yum install -y "$yum_pkg" >/dev/null 2>&1 || return 1
-        else
-            return 1
-        fi
+    local is_installed=false
+    
+    # Special checks for different package types (silent)
+    case "$pkg" in
+        "build-essential")
+            if command -v gcc &> /dev/null && command -v make &> /dev/null && command -v g++ &> /dev/null; then
+                is_installed=true
+            elif [ -x "$(command -v apt)" ]; then
+                if dpkg -l build-essential 2>/dev/null | grep -q "^ii"; then
+                    is_installed=true
+                fi
+            fi
+            ;;
+        "libssl-dev"|"openssl-devel")
+            if [ -f "/usr/include/openssl/ssl.h" ] || [ -f "/usr/include/openssl/opensslv.h" ]; then
+                is_installed=true
+            elif command -v pkg-config &> /dev/null && pkg-config --exists openssl 2>/dev/null; then
+                is_installed=true
+            fi
+            ;;
+        "pkg-config"|"pkgconfig")
+            if command -v pkg-config &> /dev/null; then
+                is_installed=true
+            fi
+            ;;
+        "protobuf-compiler")
+            if command -v protoc &> /dev/null; then
+                is_installed=true
+            fi
+            ;;
+        *)
+            if command -v "$pkg" &> /dev/null; then
+                is_installed=true
+            fi
+            ;;
+    esac
+    
+    if [ "$is_installed" = true ]; then
+        return 0
+    fi
+    
+    # Install silently
+    if [ -x "$(command -v apt)" ]; then
+        sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1 || return 1
+    else
+        return 1
     fi
     return 0
 }
@@ -411,11 +487,11 @@ ensure_package_installed_silent() {
 # Function to build from source (robust, silent)
 build_from_source() {
     # Install build dependencies one by one, silent
-    ensure_package_installed_silent "build-essential" "build-essential" || return 1
-    ensure_package_installed_silent "libssl-dev" "openssl-devel" || return 1
-    ensure_package_installed_silent "pkg-config" "pkgconfig" || return 1
-    ensure_package_installed_silent "git" "git" || return 1
-    ensure_package_installed_silent "protobuf-compiler" "protobuf-compiler" || return 1
+    ensure_package_installed_silent "build-essential" || return 1
+    ensure_package_installed_silent "libssl-dev" || return 1
+    ensure_package_installed_silent "pkg-config" || return 1
+    ensure_package_installed_silent "git" || return 1
+    ensure_package_installed_silent "protobuf-compiler" || return 1
 
     # Check if Rust is installed
     if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
@@ -536,9 +612,9 @@ printf "\033[1;32m================================================\033[0m\n"
 echo ""
 
 # Check if tmux, cron, jq is installed first
-ensure_package_installed "tmux" "tmux"
-ensure_package_installed "cron" "cronie"
-ensure_package_installed "jq" "jq"
+ensure_package_installed "tmux"
+ensure_package_installed "cron"
+ensure_package_installed "jq"
 
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
