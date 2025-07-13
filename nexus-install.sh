@@ -174,17 +174,35 @@ get_latest_nexus_version() {
 build_nexus_from_source() {
     process_message "🔄 Собираем Nexus CLI из исходного кода..."
 
-    # Install build dependencies
-    ensure_package_installed "build-essential"
-    ensure_package_installed "libssl-dev"
-    ensure_package_installed "pkg-config"
-    ensure_package_installed "git"
-    ensure_package_installed "protobuf-compiler"
+    # Install build dependencies quietly
+    process_message "Устанавливаем зависимости для сборки..."
+    for pkg in build-essential libssl-dev pkg-config git protobuf-compiler; do
+        if ! command -v "$pkg" &> /dev/null && [ "$pkg" != "build-essential" ] && [ "$pkg" != "libssl-dev" ] && [ "$pkg" != "pkg-config" ] && [ "$pkg" != "protobuf-compiler" ]; then
+            if [ -x "$(command -v apt)" ]; then
+                sudo apt update >/dev/null 2>&1
+                sudo apt install -y "$pkg" >/dev/null 2>&1
+            elif [ -x "$(command -v yum)" ]; then
+                sudo yum install -y "$pkg" >/dev/null 2>&1
+            fi
+        elif [ "$pkg" = "build-essential" ] || [ "$pkg" = "libssl-dev" ] || [ "$pkg" = "pkg-config" ] || [ "$pkg" = "protobuf-compiler" ]; then
+            if [ -x "$(command -v apt)" ]; then
+                sudo apt update >/dev/null 2>&1
+                sudo apt install -y "$pkg" >/dev/null 2>&1
+            elif [ -x "$(command -v yum)" ]; then
+                case "$pkg" in
+                    "build-essential") sudo yum groupinstall -y "Development Tools" >/dev/null 2>&1 ;;
+                    "libssl-dev") sudo yum install -y openssl-devel >/dev/null 2>&1 ;;
+                    "pkg-config") sudo yum install -y pkgconfig >/dev/null 2>&1 ;;
+                    "protobuf-compiler") sudo yum install -y protobuf-compiler >/dev/null 2>&1 ;;
+                esac
+            fi
+        fi
+    done
 
     # Check if Rust is installed
     if ! command -v rustc >/dev/null 2>&1 || ! command -v cargo >/dev/null 2>&1; then
         process_message "Устанавливаем Rust..."
-        if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable; then
+        if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable >/dev/null 2>&1; then
             echo "❌ Не удалось установить Rust."
             return 1
         fi
@@ -197,7 +215,7 @@ build_nexus_from_source() {
     mkdir -p "$build_dir"
 
     process_message "Клонируем репозиторий..."
-    if ! git clone https://github.com/nexus-xyz/nexus-cli.git "$build_dir"; then
+    if ! git clone https://github.com/nexus-xyz/nexus-cli.git "$build_dir" >/dev/null 2>&1; then
         echo "❌ Не удалось клонировать репозиторий."
         rm -rf "$build_dir" 2>/dev/null || true
         return 1
@@ -230,7 +248,7 @@ build_nexus_from_source() {
     source "$HOME/.cargo/env" 2>/dev/null || export PATH="$HOME/.cargo/bin:$PATH"
 
     process_message "Собираем проект (это может занять несколько минут)..."
-    if cargo build --release; then
+    if cargo build --release >/dev/null 2>&1; then
         mkdir -p "$HOME/.nexus/bin"
         if [ -f "target/release/nexus-network" ]; then
             cp "target/release/nexus-network" "$HOME/.nexus/bin/"
@@ -405,7 +423,8 @@ build_from_source() {
         sudo apt update >/dev/null 2>&1
         sudo apt install -y build-essential libssl-dev pkg-config git protobuf-compiler >/dev/null 2>&1
     elif command -v yum >/dev/null 2>&1; then
-        sudo yum install -y gcc gcc-c++ openssl-devel pkgconfig git protobuf-compiler >/dev/null 2>&1
+        sudo yum groupinstall -y "Development Tools" >/dev/null 2>&1
+        sudo yum install -y openssl-devel pkgconfig git protobuf-compiler >/dev/null 2>&1
     fi
     
     # Install Rust if needed
