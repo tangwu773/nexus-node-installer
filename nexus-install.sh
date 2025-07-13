@@ -116,19 +116,9 @@ ensure_package_installed() {
     process_message "Устанавливаем $pkg..."
     
     if [ -x "$(command -v apt)" ]; then
-        # Try to install the package, if it fails try updating repositories first
         if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1; then
-            process_message "Первая попытка неудачна, обновляем репозитории..."
-            if sudo apt update >/dev/null 2>&1; then
-                # Retry installation after updating repositories
-                if ! sudo DEBIAN_FRONTEND=noninteractive apt install -y "$pkg" >/dev/null 2>&1; then
-                    echo "❌ Не удалось установить $pkg"
-                    return 1
-                fi
-            else
-                echo "❌ Не удалось установить $pkg"
-                return 1
-            fi
+            echo "❌ Не удалось установить $pkg"
+            return 1
         fi
     else
         echo "❌ Система не поддерживается. Требуется Debian/Ubuntu с менеджером пакетов apt"
