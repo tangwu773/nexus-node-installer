@@ -519,7 +519,7 @@ SWAP_SIZE=${SWAP_SIZE:-12}
 
 echo ""
 if [ "$SWAP_SIZE" = "0" ]; then
-    success_message "✅ Файл подкачки не нужен"
+    success_message "✅ Файл подкачки не нужен" "end"
 else
     success_message "✅ Создать файл подкачки размером ${SWAP_SIZE}Гб" "end"
 fi
