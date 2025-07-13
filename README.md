@@ -1,68 +1,40 @@
 # Nexus Node Installer
 
-Автоматический установщик ноды Nexus для Linux серверов.
+Automated Nexus node installer for Linux.
 
-## Установка
+## Installation
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/titbm/nexus-node-installer/main/nexus-install.sh | bash
 ```
 
-## Функционал
+## Requirements
 
-- Проверка и настройка конфигурационных файлов
-- Проверка и установка зависимостей (tmux, curl)
-- Завершение существующих tmux сессий
-- Настройка swap-файла (интерактивно)
-- Установка/обновление Nexus CLI с проверкой версий
-- Проверка совместимости ОС (Ubuntu 22.04+)
-- Ввод и сохранение Nexus ID
-- Запуск ноды в защищенной tmux сессии
-- Настройка автоматической перезагрузки через cron (опционально)
+- Debian/Ubuntu with apt package manager
+- sudo privileges
+- internet connection
 
-## Системные требования
-
-- Ubuntu 22.04+ (обязательно)
-- Sudo права
-- Интернет-соединение
-- Минимум 4GB RAM
-
-## Управление нодой
+## Management
 
 ```bash
-# Просмотр логов
+# View logs
 tmux a -t nexus
 
-# Остановка ноды
+# Stop node
 tmux kill-session -t nexus
 
-# Выход из логов без остановки ноды
-# Ctrl+B, затем D
+# Exit logs (Ctrl+B, D)
 ```
 
-## Основные проблемы
+## Troubleshooting
 
-### Несовместимая версия Ubuntu
-Требуется Ubuntu 22.04 или выше. Обновите систему или используйте другой сервер.
-
-### Отсутствие зависимостей
+### Dependencies
 ```bash
-# Ubuntu/Debian
-sudo apt update && sudo apt install curl tmux -y
-
-# CentOS/RHEL
-sudo yum install curl tmux -y
+sudo apt update && sudo apt install curl tmux jq cron -y
 ```
 
-### Проблемы с tmux
+### Sessions
 ```bash
-# Посмотреть сессии
 tmux list-sessions
-
-# Принудительно завершить
 tmux kill-session -t nexus
 ```
-
-## Лицензия
-
-MIT License
