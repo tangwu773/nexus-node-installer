@@ -607,7 +607,7 @@ show_memory_status() {
 # Check and stop existing tmux sessions first (before swap operations)
 echo ""
 printf "\033[1;32m================================================\033[0m\n"
-printf "\033[1;32mПРОВЕРКА УСТАНОВЛЛЕНОГО ПО\033[0m\n"
+printf "\033[1;32mПРОВЕРКА УСТАНОВЛЕННОГО ПО\033[0m\n"
 printf "\033[1;32m================================================\033[0m\n"
 echo ""
 
