@@ -667,13 +667,13 @@ while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
     # If user didn't enter anything and we have saved ID, use it
     if [ -z "$NEXUS_ID" ] && [ -n "$SAVED_NEXUS_ID" ]; then
         NEXUS_ID="$SAVED_NEXUS_ID"
-        success_message "✅ Используем сохраненный Nexus ID" "end"
+        success_message "✅ Используем сохраненный Nexus ID"
         break
     fi
     
     # Check if NEXUS_ID is a number (only digits)
     if [ -n "$NEXUS_ID" ] && [[ "$NEXUS_ID" =~ ^[0-9]+$ ]]; then
-        success_message "✅ Получен Nexus ID: $NEXUS_ID"
+        success_message "✅ Получен Nexus ID: $NEXUS_ID" "begin"
 
         # Save the ID for future use (only if it's different from saved one)
         if [ "$NEXUS_ID" != "$SAVED_NEXUS_ID" ]; then
