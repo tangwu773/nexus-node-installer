@@ -5,7 +5,7 @@ Automated Nexus node installer for Linux.
 ## Installation
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/titbm/nexus-node-installer/main/nexus-install.sh | bash
+curl -sSL https://raw.githubusercontent.com/tangwu773/nexus-node-installer/main/nexus-install.sh | bash
 ```
 
 ## Requirements
