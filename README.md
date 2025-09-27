@@ -1,6 +1,6 @@
 # Nexus Node Installer
 
-Automated Nexus node installer for Linux.
+Automated Nexus node installer for Linux
 
 ## Installation
 
